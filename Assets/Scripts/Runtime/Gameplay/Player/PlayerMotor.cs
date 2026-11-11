@@ -44,7 +44,7 @@ namespace VertigoShift.Gameplay.Player
         [Tooltip("Maximum distance (meters) a single slide may cover before it ends on its own.")]
         public float slideMaxDistance = 6f;
         [Tooltip("Grace period (seconds) during which a slide cannot be cancelled by releasing the movement keys.")]
-        public float slideMinTime = 0.15f;
+        public float slideMinTime = 0f;
         [Tooltip("How far the body is pushed off the old surface when the gravity flips.")]
         public float surfaceRelease = 0.06f;
 
@@ -83,6 +83,7 @@ namespace VertigoShift.Gameplay.Player
         float slideTimer;
         float slideDistance;
         float jumpBuffer;
+        float coyoteTimer;
         /// <summary>
         /// Set when a slide consumed the crouch button. While it is set the player stays
         /// upright and cannot start another slide until the crouch button is released,
@@ -165,8 +166,9 @@ namespace VertigoShift.Gameplay.Player
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            if (ProtoInput.JumpPressed) jumpBuffer = 0.18f;
+            if (ProtoInput.JumpPressed) jumpBuffer = 0.25f;
             else jumpBuffer -= dt;
+            if (jumpBuffer < 0f) jumpBuffer = 0f;
 
             UpdateCrouch();
         }
@@ -214,6 +216,11 @@ namespace VertigoShift.Gameplay.Player
             float upSpeed = Vector3.Dot(velocity, up);
 
             IsGrounded = CheckGround(up);
+            // Coyote time: allow a jump for a short window after leaving the ground so
+            // a slide that briefly loses contact (or a slightly early jump press) does
+            // not silently swallow the jump.
+            if (IsGrounded) coyoteTimer = 0.15f;
+            else coyoteTimer = Mathf.Max(0f, coyoteTimer - dt);
 
             // --- wish direction (relative to the current gravity plane)
             Vector2 mv = ProtoInput.Move;
@@ -254,14 +261,19 @@ namespace VertigoShift.Gameplay.Player
                 // momentum is bled off by the normal ground friction below.
                 bool releasedMovement = !hasInput && slideTimer > slideMinTime;
 
-                if (!crouchHeld || releasedMovement || planar.magnitude < slideExitSpeed ||
+                // Allow a slide jump: pressing jump cancels the slide so the jump code
+                // below can launch the player immediately.
+                bool jumpRequested = jumpBuffer > 0f;
+
+                if (!crouchHeld || releasedMovement || jumpRequested || planar.magnitude < slideExitSpeed ||
                     slideTimer > slideMaxTime || slideDistance >= slideMaxDistance || !IsGrounded)
                 {
                     IsSliding = false;
                     // The crouch button that started this slide is now "used up": the
                     // player returns to standing and must release + re-press it to
-                    // crouch or slide again.
-                    crouchConsumed = crouchHeld;
+                    // crouch or slide again. A jump during the slide also spends the
+                    // crouch so the camera lifts off the ground with the player.
+                    crouchConsumed = crouchHeld || jumpRequested;
                 }
             }
             else
@@ -279,14 +291,19 @@ namespace VertigoShift.Gameplay.Player
             }
 
             // --- vertical (along the current up)
-            if (IsGrounded)
+            bool groundedForJump = IsGrounded || coyoteTimer > 0f;
+            if (groundedForJump)
             {
-                upSpeed = -groundStickSpeed; // gentle stick to the surface
                 if (jumpBuffer > 0f)
                 {
                     upSpeed = jumpSpeed;
                     jumpBuffer = 0f;
                     IsGrounded = false;
+                    coyoteTimer = 0f;
+                }
+                else if (IsGrounded)
+                {
+                    upSpeed = -groundStickSpeed; // gentle stick to the surface
                 }
             }
             else

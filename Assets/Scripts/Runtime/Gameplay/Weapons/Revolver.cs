@@ -1,7 +1,6 @@
 using System.Collections;
 using UnityEngine;
 using VertigoShift.Audio;
-using VertigoShift.Gameplay.Panic;
 using VertigoShift.Gameplay.Player;
 using VertigoShift.Gameplay.Targets;
 using VertigoShift.Input;
@@ -11,6 +10,7 @@ namespace VertigoShift.Gameplay.Weapons
     /// <summary>
     /// Basic revolver: 6 rounds, hitscan raycast, reload delay.
     /// Adds game feel: tracer, muzzle flash, hitstop and a FOV kick.
+    /// Firing is semi-auto: one shot per left-click, never auto-repeats while holding.
     /// </summary>
     [DisallowMultipleComponent]
     public class Revolver : MonoBehaviour
@@ -19,7 +19,6 @@ namespace VertigoShift.Gameplay.Weapons
         public Camera cam;
         public Transform muzzle;
         public SfxBank sfx;
-        public DizzinessSystem dizziness;
         public PlayerLook look;
 
         [Header("Weapon")]
@@ -29,9 +28,11 @@ namespace VertigoShift.Gameplay.Weapons
         public float reloadTime = 1.9f;
         public float range = 120f;
         public float damage = 60f;
+        [Tooltip("Layers the hitscan can hit. Defaults to everything except Ignore Raycast.")]
+        public LayerMask hitMask = Physics.DefaultRaycastLayers;
 
         [Header("Feel")]
-        [Tooltip("Freeze frame duration when a shot connects.")]
+        [Tooltip("Freeze frame duration when a shot connects with a target.")]
         public float hitstopDuration = 0.045f;
         public float tracerDuration = 0.05f;
         public float muzzleFlashIntensity = 12f;
@@ -51,14 +52,39 @@ namespace VertigoShift.Gameplay.Weapons
         float tracerTimer;
         float flashTimer;
 
+        static readonly Collider[] overlapBuffer = new Collider[64];
+        static int hitstopDepth = 0;
+        static float savedTimeScale = 1f;
+        bool isFreezing;
+
         void Awake()
         {
             if (cam == null) cam = GetComponentInChildren<Camera>();
             if (sfx == null) sfx = GetComponent<SfxBank>();
-            if (dizziness == null) dizziness = GetComponent<DizzinessSystem>();
             if (look == null) look = GetComponent<PlayerLook>();
             if (muzzle == null && cam != null) muzzle = cam.transform;
-            bullets = magazineSize;
+
+            if (magazineSize < 1) magazineSize = 1;
+            if (fireInterval < 0.01f) fireInterval = 0.01f;
+            if (reloadTime < 0.01f) reloadTime = 0.01f;
+            if (range < 1f) range = 1f;
+            if (tracerDuration < 0.001f) tracerDuration = 0.001f;
+            if (muzzleFlashDuration < 0.001f) muzzleFlashDuration = 0.001f;
+            if (hitMask.value == 0) hitMask = Physics.DefaultRaycastLayers;
+            if (bullets <= 0 || bullets > magazineSize) bullets = magazineSize;
+        }
+
+        void OnValidate()
+        {
+            if (magazineSize < 1) magazineSize = 1;
+            if (fireInterval < 0.01f) fireInterval = 0.01f;
+            if (reloadTime < 0.01f) reloadTime = 0.01f;
+            if (range < 1f) range = 1f;
+            if (tracerDuration < 0.001f) tracerDuration = 0.001f;
+            if (muzzleFlashDuration < 0.001f) muzzleFlashDuration = 0.001f;
+            if (hitMask.value == 0) hitMask = Physics.DefaultRaycastLayers;
+            if (bullets < 0) bullets = 0;
+            if (bullets > magazineSize) bullets = magazineSize;
         }
 
         void Update()
@@ -76,6 +102,8 @@ namespace VertigoShift.Gameplay.Weapons
                 }
             }
 
+            // FX timers run on unscaled time so tracers/muzzle flash do not linger
+            // during the hitstop (timeScale 0.05).
             UpdateFxTimers(Time.unscaledDeltaTime);
         }
 
@@ -87,15 +115,14 @@ namespace VertigoShift.Gameplay.Weapons
         /// </summary>
         void LateUpdate()
         {
-            if (ProtoInput.FireHeld && !IsReloading && Time.time >= nextFireTime) Fire();
+            // Never shoot while the cursor is free (menus, ESC) or while the game is paused.
+            if (Cursor.lockState != CursorLockMode.Locked) return;
+            if (Time.timeScale <= 0f) return;
+
+            // Semi-auto: one shot per click. FirePressed is true for a single frame.
+            if (ProtoInput.FirePressed && !IsReloading && Time.time >= nextFireTime) Fire();
         }
 
-        /// <summary>
-        /// Drives the tracer / muzzle flash lifetimes on unscaled time.
-        /// They used to be driven by Invoke(), which runs on scaled time - during the
-        /// hitstop (timeScale 0.05) the tracer stayed on screen for ~20x too long,
-        /// which is exactly when the player notices the streak hanging in the world.
-        /// </summary>
         void UpdateFxTimers(float dt)
         {
             if (tracerTimer > 0f)
@@ -117,7 +144,15 @@ namespace VertigoShift.Gameplay.Weapons
 
         void OnDisable()
         {
-            if (Time.timeScale < 1f) Time.timeScale = 1f;
+            // Restore the global time scale if this component is disabled/destroyed
+            // while a hitstop it started is still running. Uses a shared counter so
+            // overlapping freezes (multiple shooters) never clobber each other.
+            if (isFreezing)
+            {
+                isFreezing = false;
+                hitstopDepth = Mathf.Max(0, hitstopDepth - 1);
+                if (hitstopDepth == 0) Time.timeScale = savedTimeScale;
+            }
         }
 
         public void StartReload()
@@ -130,11 +165,22 @@ namespace VertigoShift.Gameplay.Weapons
 
         void Fire()
         {
+            if (cam == null)
+            {
+                Debug.LogWarning("[Revolver] No camera assigned; cannot fire.");
+                return;
+            }
+
             if (bullets <= 0)
             {
+                // Out of ammo: auto-reload. Do not also play a dry-fire click on top
+                // of the reload sound (they would overlap and clip).
+                if (magazineSize <= 0)
+                {
+                    if (sfx != null) sfx.PlayDryFire();
+                    return;
+                }
                 StartReload();
-                // nextFireTime = Time.time + 0.35f;
-                if (sfx != null) sfx.PlayDryFire();
                 return;
             }
 
@@ -142,15 +188,15 @@ namespace VertigoShift.Gameplay.Weapons
             ShotsFired++;
             nextFireTime = Time.time + fireInterval;
 
-            Vector3 origin = cam != null ? cam.transform.position : transform.position;
-            Vector3 dir = cam != null ? cam.transform.forward : transform.forward;
+            Vector3 origin = cam.transform.position;
+            Vector3 dir = cam.transform.forward;
 
             // The camera can end up embedded in level geometry (hugging a wall, or
             // standing on a wall after a gravity shift - the eye offset then points
-            // sideways into the geometry). A raycast that starts inside a collider does
-            // not report that collider, so the shot tunnels straight through the wall
-            // and the tracer gets drawn on the far side of it. Backing the origin up to
-            // just outside the geometry keeps the bullet on this side of the wall.
+            // sideways into the geometry). A raycast that starts inside a collider
+            // does not report that collider, so the shot tunnels straight through
+            // the wall and the tracer gets drawn on the far side of it. Backing the
+            // origin up to just outside the geometry keeps the bullet on this side.
             Vector3 rayOrigin = origin;
             if (IsInsideGeometry(origin))
             {
@@ -158,13 +204,14 @@ namespace VertigoShift.Gameplay.Weapons
             }
 
             RaycastHit hit;
-            bool hasHit = Physics.Raycast(rayOrigin, dir, out hit, range, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            bool hasHit = Physics.Raycast(rayOrigin, dir, out hit, range, hitMask, QueryTriggerInteraction.Ignore);
             Vector3 endPoint = hasHit ? hit.point : rayOrigin + dir * tracerMissLength;
 
-            // Aim from the eye (so the crosshair is truthful) but draw the streak from
-            // the muzzle: starting it at the eye puts the first vertex inside the near
-            // clip plane, which made the streak pop out of the middle of the screen.
-            // If the muzzle itself is buried in geometry, fall back to the ray origin.
+            // Aim from the eye (so the crosshair is truthful) but draw the streak
+            // from the muzzle: starting it at the eye puts the first vertex inside
+            // the near clip plane, which made the streak pop out of the middle of
+            // the screen. If the muzzle itself is buried in geometry, fall back to
+            // the ray origin.
             Vector3 tracerStart = muzzle != null ? muzzle.position : rayOrigin;
             if (IsInsideGeometry(tracerStart)) tracerStart = rayOrigin;
 
@@ -176,27 +223,36 @@ namespace VertigoShift.Gameplay.Weapons
             if (hasHit)
             {
                 TargetDummy target = hit.collider.GetComponentInParent<TargetDummy>();
-                if (target != null) target.TakeDamage(damage, hit.point);
-                if (hitstopDuration > 0f) StartCoroutine(HitStopRoutine(hitstopDuration));
+                if (target != null)
+                {
+                    target.TakeDamage(damage, hit.point);
+                    // Hitstop only on a real target hit (not on walls/floor), and
+                    // coordinated through a shared counter so overlapping freezes
+                    // never leave Time.timeScale stuck at 1 or 0.05.
+                    if (hitstopDuration > 0f) StartCoroutine(HitStopRoutine(hitstopDuration));
+                }
             }
         }
 
         /// <summary>True when the point sits strictly inside a collider (the player's own body is ignored).</summary>
         bool IsInsideGeometry(Vector3 point)
         {
-            Collider[] hits = Physics.OverlapSphere(point, 0.05f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
-            for (int i = 0; i < hits.Length; i++)
+            int count = Physics.OverlapSphereNonAlloc(point, 0.05f, overlapBuffer, hitMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
             {
-                if (hits[i].transform.root == transform.root) continue;
+                Collider c = overlapBuffer[i];
+                if (c == null) continue;
+                if (c.transform.root == transform.root) continue;
                 // ClosestPoint returns the point itself only when it is inside the collider.
-                if (hits[i].ClosestPoint(point) == point) return true;
+                if (c.ClosestPoint(point) == point) return true;
             }
             return false;
         }
 
         /// <summary>
         /// Moves the point backwards along the shot direction until it leaves whatever
-        /// solid geometry it is stuck in.
+        /// solid geometry it is stuck in. If it cannot escape, the original point is
+        /// kept rather than pushing the origin behind the player.
         /// </summary>
         Vector3 PushOutOfGeometry(Vector3 point, Vector3 dir)
         {
@@ -206,14 +262,21 @@ namespace VertigoShift.Gameplay.Weapons
                 probe -= dir * 0.15f;
                 if (!IsInsideGeometry(probe)) return probe;
             }
-            return point - dir * 1.2f;
+            return point;
         }
 
         IEnumerator HitStopRoutine(float duration)
         {
+            if (hitstopDepth == 0) savedTimeScale = Time.timeScale;
+            hitstopDepth++;
+            isFreezing = true;
             Time.timeScale = 0.05f;
+
             yield return new WaitForSecondsRealtime(duration);
-            Time.timeScale = 1f;
+
+            isFreezing = false;
+            hitstopDepth = Mathf.Max(0, hitstopDepth - 1);
+            if (hitstopDepth == 0) Time.timeScale = savedTimeScale;
         }
 
         void PlayFlash()

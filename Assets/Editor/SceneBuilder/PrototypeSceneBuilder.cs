@@ -203,6 +203,7 @@ namespace VertigoShift.EditorTools
             muzzleFlash.range = 14f;
             muzzleFlash.intensity = 0f;
             muzzleFlash.color = new Color(1f, 0.85f, 0.55f);
+            muzzleFlash.shadows = LightShadows.None;
             muzzleFlash.enabled = false;
 
             // wiring
@@ -220,7 +221,6 @@ namespace VertigoShift.EditorTools
             rig.revolver.cam = cam;
             rig.revolver.muzzle = flashGo.transform;
             rig.revolver.sfx = player.GetComponent<SfxBank>();
-            rig.revolver.dizziness = rig.dizziness;
             rig.revolver.look = rig.look;
             rig.revolver.tracer = tracer;
             rig.revolver.muzzleFlash = muzzleFlash;
