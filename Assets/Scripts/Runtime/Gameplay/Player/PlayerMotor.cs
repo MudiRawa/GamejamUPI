@@ -186,8 +186,12 @@ namespace VertigoShift.Gameplay.Player
 
             float h = IsCrouching ? crouchHeight : standHeight;
             capsule.height = h;
-            // Keep the feet where they were: shift the collider centre down by half the delta.
-            capsule.center = new Vector3(0f, -(standHeight - h) * 0.5f, 0f);
+            // Keep the feet planted on the current gravity surface: shift the collider
+            // centre toward the feet (i.e. opposite to Up) by half the height delta.
+            // This must follow the current gravity Up, not world Y, otherwise crouching
+            // on the ceiling/walls detaches the body from the surface.
+            Vector3 centerOffset = -transform.InverseTransformDirection(Up) * ((standHeight - h) * 0.5f);
+            capsule.center = centerOffset;
             rb.centerOfMass = capsule.center;
         }
 

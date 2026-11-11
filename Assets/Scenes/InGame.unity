@@ -2927,7 +2927,6 @@ MonoBehaviour:
   cam: {fileID: 697710363}
   muzzle: {fileID: 473499315}
   sfx: {fileID: 1046494607}
-  dizziness: {fileID: 1046494604}
   look: {fileID: 1046494609}
   magazineSize: 6
   bullets: 6
@@ -2935,6 +2934,9 @@ MonoBehaviour:
   reloadTime: 1.9
   range: 120
   damage: 60
+  hitMask:
+    serializedVersion: 2
+    m_Bits: 51
   hitstopDuration: 0.045
   tracerDuration: 0.07
   muzzleFlashIntensity: 12
@@ -2964,7 +2966,7 @@ MonoBehaviour:
   maxPitch: 85
   eyeOffset: 0.72
   crouchEyeOffset: 0.34
-  baseFov: 78
+  baseFov: 120
   shiftFovKick: 9
   fireFovKick: 4.5
   criticalDutchAngle: 17
