@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: VFX_Pratinjau_Volume
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.VolumeProfile
   components:
-  - {fileID: 2971227609824257574}
---- !u!114 &2971227609824257574
+  - {fileID: 5197180614660954829}
+--- !u!114 &5197180614660954829
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
