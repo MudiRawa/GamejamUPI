@@ -44,6 +44,12 @@ namespace VertigoShift.Gameplay.Weapons
         public LineRenderer tracer;
         public Light muzzleFlash;
 
+        [Header("VFX")]
+        public GameObject vfxTembakanRevolver;
+        public GameObject vfxPeluruTrail;
+        public GameObject vfxImpactPeluru;
+        public GameObject vfxPeluruKenaMusuh;
+
         public bool IsReloading { get; private set; }
         public float ReloadProgress { get; private set; }
         public int ShotsFired { get; private set; }
@@ -220,16 +226,31 @@ namespace VertigoShift.Gameplay.Weapons
             PlayFlash();
             DrawTracer(tracerStart, endPoint);
 
+            // VFX tembakan + trail peluru
+            Quaternion arahTembak = Quaternion.LookRotation(endPoint - tracerStart);
+            if (vfxTembakanRevolver != null) Instantiate(vfxTembakanRevolver, tracerStart, arahTembak, muzzle);
+            if (vfxPeluruTrail != null) Instantiate(vfxPeluruTrail, tracerStart, arahTembak);
+
             if (hasHit)
             {
                 TargetDummy target = hit.collider.GetComponentInParent<TargetDummy>();
                 if (target != null)
                 {
                     target.TakeDamage(damage, hit.point);
+
+                    // VFX kena musuh (kalau mati, pecahnya diurus TargetDummy)
+                    if (target.health > 0f && vfxPeluruKenaMusuh != null)
+                        Instantiate(vfxPeluruKenaMusuh, hit.point, Quaternion.LookRotation(hit.normal));
+
                     // Hitstop only on a real target hit (not on walls/floor), and
                     // coordinated through a shared counter so overlapping freezes
                     // never leave Time.timeScale stuck at 1 or 0.05.
                     if (hitstopDuration > 0f) StartCoroutine(HitStopRoutine(hitstopDuration));
+                }
+                else if (vfxImpactPeluru != null)
+                {
+                    // VFX nembak tembok
+                    Instantiate(vfxImpactPeluru, hit.point, Quaternion.LookRotation(hit.normal));
                 }
             }
         }

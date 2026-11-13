@@ -48,6 +48,10 @@ namespace VertigoShift.Gameplay.Player
         [Tooltip("How far the body is pushed off the old surface when the gravity flips.")]
         public float surfaceRelease = 0.06f;
 
+        [Header("VFX")]
+        public GameObject vfxAngin;
+        public GameObject vfxSlide;
+
         [Header("Body")]
         public float standHeight = 1.8f;
         public float crouchHeight = 1.05f;
@@ -91,6 +95,9 @@ namespace VertigoShift.Gameplay.Player
         /// </summary>
         bool crouchConsumed;
 
+        ParticleSystem angin;
+        ParticleSystem slide;
+
         void Awake()
         {
             rb = GetComponent<Rigidbody>();
@@ -114,6 +121,46 @@ namespace VertigoShift.Gameplay.Player
             heading.Normalize();
 
             if (gravity != null) gravity.GravityChanged += OnGravityChanged;
+        }
+
+        void Start()
+        {
+            // angin nempel di kamera, asap slide nempel di player
+            Camera cam = GetComponentInChildren<Camera>();
+            if (vfxAngin != null && cam != null)
+            {
+                angin = Instantiate(vfxAngin, cam.transform).GetComponent<ParticleSystem>();
+                angin.transform.localPosition = Vector3.zero;
+                angin.transform.localRotation = Quaternion.identity;
+                angin.Stop();
+            }
+            if (vfxSlide != null)
+            {
+                slide = Instantiate(vfxSlide, transform).GetComponent<ParticleSystem>();
+                slide.Stop();
+            }
+        }
+
+        void LateUpdate()
+        {
+            // angin keluar pas lari kencang atau slide
+            bool lariKencang = IsSliding || CurrentSpeed > runSpeed * 0.9f;
+            NyalakanVfx(angin, lariKencang);
+
+            // asap slide di kaki
+            if (slide != null)
+            {
+                slide.transform.position = transform.position - Up * (standHeight * 0.5f);
+                slide.transform.rotation = Quaternion.LookRotation(Heading, Up);
+            }
+            NyalakanVfx(slide, IsSliding);
+        }
+
+        void NyalakanVfx(ParticleSystem vfx, bool nyala)
+        {
+            if (vfx == null) return;
+            if (nyala && !vfx.isEmitting) vfx.Play();
+            if (!nyala && vfx.isEmitting) vfx.Stop();
         }
 
         void OnDestroy()

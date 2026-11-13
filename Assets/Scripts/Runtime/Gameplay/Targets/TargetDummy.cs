@@ -21,6 +21,9 @@ namespace VertigoShift.Gameplay.Targets
         public Transform player;
         public Material gibMaterial;
 
+        [Header("VFX")]
+        public GameObject vfxMusuhPecah;
+
         [Header("Death")]
         public int gibCount = 10;
         public float gibSize = 0.22f;
@@ -78,7 +81,17 @@ namespace VertigoShift.Gameplay.Targets
         void Die()
         {
             dead = true;
-            SpawnGibs();
+
+            // VFX musuh pecah, kalau kosong pakai gibs yang lama
+            if (vfxMusuhPecah != null)
+            {
+                Vector3 arah = player != null ? transform.position - player.position : transform.forward;
+                Instantiate(vfxMusuhPecah, transform.position, Quaternion.LookRotation(arah));
+            }
+            else
+            {
+                SpawnGibs();
+            }
 
             float distance = player != null ? Vector3.Distance(player.position, transform.position) : 999f;
             bool closeRange = distance <= closeRangeDistance;

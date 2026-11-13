@@ -171,6 +171,7 @@ MonoBehaviour:
   dizziness: {fileID: 1046494604}
   player: {fileID: 1046494605}
   gibMaterial: {fileID: 2100000, guid: 68dd5e1f298ec0748ae1e0cc91d7f363, type: 2}
+  vfxMusuhPecah: {fileID: 5529959743598239145, guid: 998a422cdfc0c8e488334fda28c849be, type: 3}
   gibCount: 10
   gibSize: 0.22
   gibLife: 2.5
@@ -419,6 +420,7 @@ MonoBehaviour:
   dizziness: {fileID: 1046494604}
   player: {fileID: 1046494605}
   gibMaterial: {fileID: 2100000, guid: 2e9d97bdbbb6c0e49b238fd01df65546, type: 2}
+  vfxMusuhPecah: {fileID: 5529959743598239145, guid: 998a422cdfc0c8e488334fda28c849be, type: 3}
   gibCount: 10
   gibSize: 0.22
   gibLife: 2.5
@@ -603,6 +605,7 @@ MonoBehaviour:
   dizziness: {fileID: 1046494604}
   player: {fileID: 1046494605}
   gibMaterial: {fileID: 2100000, guid: 2e9d97bdbbb6c0e49b238fd01df65546, type: 2}
+  vfxMusuhPecah: {fileID: 5529959743598239145, guid: 998a422cdfc0c8e488334fda28c849be, type: 3}
   gibCount: 10
   gibSize: 0.22
   gibLife: 2.5
@@ -978,6 +981,7 @@ MonoBehaviour:
   dizziness: {fileID: 1046494604}
   player: {fileID: 1046494605}
   gibMaterial: {fileID: 2100000, guid: 68dd5e1f298ec0748ae1e0cc91d7f363, type: 2}
+  vfxMusuhPecah: {fileID: 5529959743598239145, guid: 998a422cdfc0c8e488334fda28c849be, type: 3}
   gibCount: 10
   gibSize: 0.22
   gibLife: 2.5
@@ -1226,6 +1230,7 @@ MonoBehaviour:
   dizziness: {fileID: 1046494604}
   player: {fileID: 1046494605}
   gibMaterial: {fileID: 2100000, guid: 2e9d97bdbbb6c0e49b238fd01df65546, type: 2}
+  vfxMusuhPecah: {fileID: 5529959743598239145, guid: 998a422cdfc0c8e488334fda28c849be, type: 3}
   gibCount: 10
   gibSize: 0.22
   gibLife: 2.5
@@ -2250,6 +2255,7 @@ MonoBehaviour:
   dizziness: {fileID: 1046494604}
   player: {fileID: 1046494605}
   gibMaterial: {fileID: 2100000, guid: b5d90bd55a2c63a4eaf41b37f5d42c31, type: 2}
+  vfxMusuhPecah: {fileID: 5529959743598239145, guid: 998a422cdfc0c8e488334fda28c849be, type: 3}
   gibCount: 10
   gibSize: 0.22
   gibLife: 2.5
@@ -2839,6 +2845,8 @@ MonoBehaviour:
   slideMaxDistance: 6
   slideMinTime: 0.15
   surfaceRelease: 0.06
+  vfxAngin: {fileID: 7447449287668756906, guid: 03838265806d6834eba26d2d0a6fd4ef, type: 3}
+  vfxSlide: {fileID: 3742419156671829137, guid: 05807b121c908b743bdc004e2c4d9228, type: 3}
   standHeight: 1.8
   crouchHeight: 1.05
   radius: 0.35
@@ -2944,6 +2952,10 @@ MonoBehaviour:
   tracerMissLength: 40
   tracer: {fileID: 2063125789}
   muzzleFlash: {fileID: 473499316}
+  vfxTembakanRevolver: {fileID: 2963336292161520956, guid: 85125b380bbfccb4d901de87b5e66f8f, type: 3}
+  vfxPeluruTrail: {fileID: 1633412505049725419, guid: ec092234c5c1fb8459b46b0ca32fd628, type: 3}
+  vfxImpactPeluru: {fileID: 3615627361351046594, guid: 6cf1ef1f01049ad43929c91f2a8f7118, type: 3}
+  vfxPeluruKenaMusuh: {fileID: 4458094027646248047, guid: 35f1be2e279c90f4e8ccc776c15bec93, type: 3}
 --- !u!114 &1046494609
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3551,6 +3563,7 @@ MonoBehaviour:
   dizziness: {fileID: 1046494604}
   player: {fileID: 1046494605}
   gibMaterial: {fileID: 2100000, guid: 2e9d97bdbbb6c0e49b238fd01df65546, type: 2}
+  vfxMusuhPecah: {fileID: 5529959743598239145, guid: 998a422cdfc0c8e488334fda28c849be, type: 3}
   gibCount: 10
   gibSize: 0.22
   gibLife: 2.5
