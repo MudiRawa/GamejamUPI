@@ -43,8 +43,8 @@ public static class VFXBuilder
             hud.gambarTabung = AmbilGambar("UI_Tabung");
             hud.gambarPeluru = AmbilGambar("UI_Peluru");
             hud.gambarLubang = AmbilGambar("UI_Lubang");
-            hud.fontAngka = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Orbitron-900.ttf");
-            hud.fontTulisan = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Orbitron-700.ttf");
+            hud.fontAngka = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Tektur-900.ttf");
+            hud.fontTulisan = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Tektur-700.ttf");
             EditorUtility.SetDirty(hud);
         }
 

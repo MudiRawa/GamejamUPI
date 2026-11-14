@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 593c9b0e662ef744b89a006cbfecc76d
+guid: dacdd1e0f75ee6748ae4ea9e2f06cda3
 TrueTypeFontImporter:
   externalObjects: {}
   serializedVersion: 4
@@ -9,7 +9,7 @@ TrueTypeFontImporter:
   characterPadding: 1
   includeFontData: 1
   fontNames:
-  - Orbitron
+  - Tektur Black
   fallbackFontReferences: []
   customCharacters: 
   fontRenderingMode: 0
