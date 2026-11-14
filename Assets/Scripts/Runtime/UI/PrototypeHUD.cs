@@ -17,6 +17,15 @@ namespace VertigoShift.UI
         public DizzinessSystem dizziness;
         public PlayerMotor motor;
 
+        [Header("Gambar UI Peluru (boleh kosong)")]
+        public Texture2D gambarTabung;
+        public Texture2D gambarPeluru;
+        public Texture2D gambarLubang;
+
+        [Header("Font Sci-fi (boleh kosong)")]
+        public Font fontAngka;      // buat angka peluru
+        public Font fontTulisan;    // buat tulisan kecil
+
         GUIStyle title;
         GUIStyle body;
         GUIStyle big;
@@ -154,11 +163,13 @@ namespace VertigoShift.UI
         Texture2D bulat;         // gambar lingkaran
         Texture2D cincin;        // gambar lingkaran kosong
         GUIStyle gayaAngka;
-        float putar;             // putaran silinder sekarang
-        float putarTujuan;       // putaran silinder yang dituju
+        GUIStyle gayaKecil;
+        GUIStyle gayaLabel;
+        float putar;             // putaran tabung sekarang
+        float putarTujuan;       // putaran tabung yang dituju
         int tembakanTerakhir;
         float lepas;             // 1 = peluru baru kelempar keluar, 0 = udah ilang
-        int lubangLepas;         // lubang mana yang pelurunya kelempar
+        bool tadiReload;
 
         void DrawAmmo()
         {
@@ -168,29 +179,37 @@ namespace VertigoShift.UI
             {
                 bulat = BuatBulat(false);
                 cincin = BuatBulat(true);
-                gayaAngka = new GUIStyle(big);
-                gayaAngka.alignment = TextAnchor.MiddleRight;
-                gayaAngka.fontStyle = FontStyle.BoldAndItalic;
+                gayaAngka = BuatGaya(fontAngka, 56, TextAnchor.MiddleRight);
+                gayaKecil = BuatGaya(fontTulisan, 22, TextAnchor.MiddleLeft);
+                gayaLabel = BuatGaya(fontTulisan, 14, TextAnchor.MiddleRight);
                 tembakanTerakhir = revolver.ShotsFired;
+                putar = putarTujuan = 360f / revolver.magazineSize; // lubang yang mau ditembak ada di atas
             }
 
             int peluru = revolver.bullets;
             int maks = revolver.magazineSize;
             float dt = Time.unscaledDeltaTime;
 
-            // tiap nembak: silinder muter satu lubang, pelurunya kelempar keluar
+            // tiap nembak: tabung muter satu lubang, pelurunya kelempar keluar
             if (revolver.ShotsFired != tembakanTerakhir)
             {
                 tembakanTerakhir = revolver.ShotsFired;
                 putarTujuan += 360f / maks;
-                lubangLepas = peluru;
                 lepas = 1f;
             }
 
             // gerakin animasinya sekali per frame aja
             if (Event.current.type == EventType.Repaint)
             {
-                if (revolver.IsReloading) putarTujuan += 500f * dt; // pas reload silinder muter kenceng
+                if (revolver.IsReloading) putarTujuan += 500f * dt; // pas reload tabung muter kenceng
+
+                // reload selesai: lurusin lagi biar peluru yang mau ditembak pas di atas
+                if (tadiReload && !revolver.IsReloading)
+                {
+                    float satu = 360f / maks;
+                    putarTujuan = Mathf.Round((putarTujuan - satu) / 360f) * 360f + satu;
+                }
+                tadiReload = revolver.IsReloading;
                 putar = Mathf.Lerp(putar, putarTujuan, 15f * dt);
                 lepas = Mathf.MoveTowards(lepas, 0f, 2.5f * dt);
             }
@@ -198,12 +217,28 @@ namespace VertigoShift.UI
             // pas reload, peluru keisi satu-satu
             int terisi = revolver.IsReloading ? Mathf.FloorToInt(revolver.ReloadProgress * maks) : peluru;
 
-            // posisi silinder di pojok kanan bawah
+            // posisi tabung di pojok kanan bawah
             float cx = Screen.width - 110f;
             float cy = Screen.height - 105f;
 
-            GUI.color = new Color(1f, 1f, 1f, 0.35f);
-            GUI.DrawTexture(new Rect(cx - 60f, cy - 60f, 120f, 120f), cincin);
+            // pakai gambar kalau ada, kalau nggak pakai lingkaran dari kode
+            Texture2D texPeluru = gambarPeluru != null ? gambarPeluru : bulat;
+            Texture2D texLubang = gambarLubang != null ? gambarLubang : cincin;
+
+            if (gambarTabung != null)
+            {
+                // gambar tabung ikut muter
+                Matrix4x4 awal = GUI.matrix;
+                GUIUtility.RotateAroundPivot(putar, new Vector2(cx, cy));
+                GUI.color = Color.white;
+                GUI.DrawTexture(new Rect(cx - 60f, cy - 60f, 120f, 120f), gambarTabung);
+                GUI.matrix = awal;
+            }
+            else
+            {
+                GUI.color = new Color(1f, 1f, 1f, 0.35f);
+                GUI.DrawTexture(new Rect(cx - 60f, cy - 60f, 120f, 120f), cincin);
+            }
 
             for (int i = 0; i < maks; i++)
             {
@@ -213,39 +248,83 @@ namespace VertigoShift.UI
 
                 if (i < terisi)
                 {
-                    GUI.color = new Color(1f, 0.82f, 0.23f); // kuning
-                    GUI.DrawTexture(new Rect(x - 14f, y - 14f, 28f, 28f), bulat);
+                    GUI.color = gambarPeluru != null ? Color.white : new Color(1f, 0.82f, 0.23f); // kuning
+                    GUI.DrawTexture(new Rect(x - 14f, y - 14f, 28f, 28f), texPeluru);
                 }
                 else
                 {
-                    GUI.color = new Color(1f, 1f, 1f, 0.35f);
-                    GUI.DrawTexture(new Rect(x - 14f, y - 14f, 28f, 28f), cincin);
-                }
-
-                // peluru yang baru ditembak kelempar keluar terus ilang
-                if (i == lubangLepas && lepas > 0f)
-                {
-                    float jauh = (1f - lepas) * 70f;
-                    float lx = x + Mathf.Cos(sudut) * jauh;
-                    float ly = y + Mathf.Sin(sudut) * jauh;
-                    GUI.color = new Color(1f, 0.82f, 0.23f, lepas);
-                    GUI.DrawTexture(new Rect(lx - 14f, ly - 14f, 28f, 28f), bulat);
+                    GUI.color = gambarLubang != null ? Color.white : new Color(1f, 1f, 1f, 0.35f);
+                    GUI.DrawTexture(new Rect(x - 14f, y - 14f, 28f, 28f), texLubang);
                 }
             }
 
-            // angka peluru, merah kalau habis
-            GUI.color = peluru == 0 ? new Color(1f, 0.25f, 0.25f) : Color.white;
-            GUI.Label(new Rect(cx - 260f, cy - 40f, 120f, 70f), peluru.ToString(), gayaAngka);
-            GUI.color = new Color(1f, 1f, 1f, 0.6f);
-            GUI.Label(new Rect(cx - 140f, cy - 10f, 60f, 40f), "/ " + maks, body);
+            // peluru yang baru ditembak keluar dari lubang paling atas, mental ke atas terus ilang
+            if (lepas > 0f)
+            {
+                float k = 1f - lepas;
+                float lx = cx + k * 30f;
+                float ly = cy - 36f - k * 70f + k * k * 50f;
+                GUI.color = gambarPeluru != null ? new Color(1f, 1f, 1f, lepas) : new Color(1f, 0.82f, 0.23f, lepas);
+                GUI.DrawTexture(new Rect(lx - 14f, ly - 14f, 28f, 28f), texPeluru);
+            }
 
-            // tulisan kecil di atas angka
+            // ---- tulisan di kiri tabung
+            Color cyan = new Color(0.16f, 0.94f, 1f);
+            Color kuning = new Color(1f, 0.82f, 0.23f);
+            Color merah = new Color(1f, 0.25f, 0.25f);
+            float kanan = cx - 78f; // ujung kanan tulisan
+
+            // label kecil di atas
             string tulisan = "REVOLVER";
-            if (revolver.IsReloading) tulisan = "RELOAD...";
-            else if (peluru == 0) tulisan = "[R] RELOAD";
+            Color warnaTulisan = cyan;
+            if (revolver.IsReloading)
+            {
+                tulisan = "RELOAD";
+                warnaTulisan = kuning;
+            }
+            else if (peluru == 0)
+            {
+                tulisan = "[R] RELOAD";
+                warnaTulisan = merah;
+                warnaTulisan.a = 0.4f + Mathf.PingPong(Time.unscaledTime * 3f, 0.6f); // kedip
+            }
+            TulisGlow(new Rect(kanan - 170f, cy - 64f, 170f, 20f), tulisan, gayaLabel, warnaTulisan);
+
+            // garis tipis di bawah label + kotak kecil di ujungnya
+            GUI.color = new Color(cyan.r, cyan.g, cyan.b, 0.6f);
+            GUI.DrawTexture(new Rect(kanan - 170f, cy - 42f, 170f, 2f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(kanan - 6f, cy - 45f, 6f, 8f), Texture2D.whiteTexture);
+
+            // angka besar + "/ 6"
+            TulisGlow(new Rect(kanan - 170f, cy - 36f, 120f, 64f), peluru.ToString(), gayaAngka, peluru == 0 ? merah : Color.white);
+            GUI.color = new Color(1f, 1f, 1f, 0.55f);
+            GUI.Label(new Rect(kanan - 46f, cy - 8f, 60f, 30f), "/" + maks, gayaKecil);
             GUI.color = Color.white;
-            GUI.Label(new Rect(cx - 230f, cy - 65f, 150f, 22f), tulisan, body);
+        }
+
+        // tulisan dengan cahaya cyan tipis di belakangnya
+        void TulisGlow(Rect r, string teks, GUIStyle gaya, Color warna)
+        {
+            GUI.color = new Color(0.16f, 0.94f, 1f, 0.25f * warna.a);
+            GUI.Label(new Rect(r.x - 2f, r.y, r.width, r.height), teks, gaya);
+            GUI.Label(new Rect(r.x + 2f, r.y, r.width, r.height), teks, gaya);
+            GUI.Label(new Rect(r.x, r.y - 2f, r.width, r.height), teks, gaya);
+            GUI.Label(new Rect(r.x, r.y + 2f, r.width, r.height), teks, gaya);
+            GUI.color = warna;
+            GUI.Label(r, teks, gaya);
             GUI.color = Color.white;
+        }
+
+        // bikin gaya tulisan, pakai font sci-fi kalau ada
+        static GUIStyle BuatGaya(Font font, int ukuran, TextAnchor rata)
+        {
+            GUIStyle gaya = new GUIStyle(GUI.skin.label);
+            gaya.font = font;
+            gaya.fontSize = ukuran;
+            gaya.alignment = rata;
+            gaya.normal.textColor = Color.white;
+            if (font == null) gaya.fontStyle = FontStyle.Bold;
+            return gaya;
         }
 
         // bikin gambar lingkaran, penuh atau cuma pinggirnya

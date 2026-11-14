@@ -4,9 +4,11 @@ using UnityEngine;
 using VertigoShift.Gameplay.Player;
 using VertigoShift.Gameplay.Targets;
 using VertigoShift.Gameplay.Weapons;
+using VertigoShift.UI;
 
 // Tools > VFX > Pasang VFX ke Scene
 // isi kolom VFX di Revolver, PlayerMotor, sama semua musuh di scene
+// sekalian isi gambar UI peluru di PrototypeHUD
 public static class VFXBuilder
 {
     const string Folder = "Assets/VFX/Prefabs/";
@@ -36,8 +38,25 @@ public static class VFXBuilder
             EditorUtility.SetDirty(musuh);
         }
 
+        foreach (PrototypeHUD hud in Object.FindObjectsByType<PrototypeHUD>(FindObjectsSortMode.None))
+        {
+            hud.gambarTabung = AmbilGambar("UI_Tabung");
+            hud.gambarPeluru = AmbilGambar("UI_Peluru");
+            hud.gambarLubang = AmbilGambar("UI_Lubang");
+            hud.fontAngka = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Orbitron-900.ttf");
+            hud.fontTulisan = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Orbitron-700.ttf");
+            EditorUtility.SetDirty(hud);
+        }
+
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         Debug.Log("VFX udah kepasang, jangan lupa Ctrl+S.");
+    }
+
+    static Texture2D AmbilGambar(string nama)
+    {
+        Texture2D gambar = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/UI/Revolver/" + nama + ".png");
+        if (gambar == null) Debug.LogWarning(nama + " nggak ketemu di Assets/UI/Revolver/");
+        return gambar;
     }
 
     static GameObject Ambil(string nama)
