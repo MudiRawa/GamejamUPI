@@ -40,11 +40,27 @@ namespace VertigoShift.Gameplay.Player
         [Tooltip("Dutch angle applied at critical panic (degrees).")]
         public float criticalDutchAngle = 17f;
 
+        [Header("VFX Recoil")]
+        public float recoilKick = 3.5f;    // kamera kesentak ke atas berapa derajat tiap nembak
+        public float recoilBalik = 12f;    // seberapa cepat kamera balik lagi
+
+        [Header("VFX Screen Shake")]
+        public float shakeMaks = 2.5f;     // getaran paling kuat (derajat)
+        public float shakeTembak = 0.3f;
+        public float shakeMusuhPecah = 0.5f;
+        public float shakeMendarat = 0.35f;
+        public float shakeGravityShift = 0.25f;
+
         float pitch;
         float fovKick;
         float roll;
         float rollTimer;
         float targetRoll;
+
+        // VFX
+        float recoil;
+        float shake;
+        float waktuDiUdara;
 
         void Awake()
         {
@@ -66,6 +82,7 @@ namespace VertigoShift.Gameplay.Player
         void OnGravityChanged(GravitySide side)
         {
             AddFovKick(shiftFovKick);
+            AddShake(shakeGravityShift); // VFX
         }
 
         void Update()
@@ -74,6 +91,7 @@ namespace VertigoShift.Gameplay.Player
             if (dt <= 0f) return;
 
             ApplyMouseLook(dt);
+            UpdateRecoilShake(dt); // VFX
             ApplyOrientation(dt);
             ApplyPanicRoll(dt);
             ApplyFov(dt);
@@ -83,6 +101,36 @@ namespace VertigoShift.Gameplay.Player
         public void AddFovKick(float amount)
         {
             fovKick = Mathf.Max(fovKick, amount);
+        }
+
+        // VFX: dipanggil Revolver tiap nembak
+        public void AddRecoil(float derajat)
+        {
+            recoil += derajat;
+        }
+
+        // VFX: 0 = nggak geter, 1 = geter paling kuat
+        public void AddShake(float kuat)
+        {
+            shake = Mathf.Clamp01(shake + kuat);
+        }
+
+        // VFX: recoil balik pelan-pelan, getaran ilang pelan-pelan, cek mendarat
+        void UpdateRecoilShake(float dt)
+        {
+            recoil = Mathf.Lerp(recoil, 0f, 1f - Mathf.Exp(-recoilBalik * dt));
+            shake = Mathf.MoveTowards(shake, 0f, dt * 1.8f);
+
+            // geter pas mendarat, tapi cuma kalau sebelumnya beneran melayang
+            if (motor != null)
+            {
+                if (!motor.IsGrounded) waktuDiUdara += dt;
+                else
+                {
+                    if (waktuDiUdara > 0.25f) AddShake(shakeMendarat);
+                    waktuDiUdara = 0f;
+                }
+            }
         }
 
         void ApplyMouseLook(float dt)
@@ -116,14 +164,21 @@ namespace VertigoShift.Gameplay.Player
             if (fwd.sqrMagnitude < 0.0001f) fwd = Vector3.ProjectOnPlane(Vector3.forward, up);
             fwd.Normalize();
             Vector3 right = Vector3.Cross(up, fwd);
-            Vector3 camForward = Quaternion.AngleAxis(-pitch, right) * fwd;
+            Vector3 camForward = Quaternion.AngleAxis(-(pitch + recoil), right) * fwd; // VFX: + recoil
 
             bool low = motor != null && (motor.IsCrouching || motor.IsSliding);
             float eye = low ? crouchEyeOffset : eyeOffset;
 
             Vector3 localOffset = transform.InverseTransformDirection(up) * eye;
             cameraPivot.localPosition = Vector3.Lerp(cameraPivot.localPosition, localOffset, 1f - Mathf.Exp(-20f * dt));
-            cameraPivot.rotation = Quaternion.LookRotation(camForward, up) * Quaternion.Euler(0f, 0f, roll);
+            // VFX: getaran acak tapi halus (pakai Perlin noise biar nggak patah-patah)
+            float k = shake * shake * shakeMaks;
+            float t = Time.time * 25f;
+            float sx = (Mathf.PerlinNoise(t, 0f) * 2f - 1f) * k;
+            float sy = (Mathf.PerlinNoise(0f, t) * 2f - 1f) * k;
+            float sz = (Mathf.PerlinNoise(t, t) * 2f - 1f) * k;
+
+            cameraPivot.rotation = Quaternion.LookRotation(camForward, up) * Quaternion.Euler(sx, sy, roll + sz);
         }
 
         void ApplyPanicRoll(float dt)

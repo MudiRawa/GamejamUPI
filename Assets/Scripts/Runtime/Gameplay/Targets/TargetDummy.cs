@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using VertigoShift.Core;
 using VertigoShift.Gameplay.Panic;
+using VertigoShift.Gameplay.Player;
 
 namespace VertigoShift.Gameplay.Targets
 {
@@ -91,6 +92,13 @@ namespace VertigoShift.Gameplay.Targets
             else
             {
                 SpawnGibs();
+            }
+
+            // VFX: layar geter pas musuh pecah
+            if (player != null)
+            {
+                PlayerLook look = player.GetComponent<PlayerLook>();
+                if (look != null) look.AddShake(look.shakeMusuhPecah);
             }
 
             float distance = player != null ? Vector3.Distance(player.position, transform.position) : 999f;

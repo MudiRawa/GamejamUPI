@@ -29,8 +29,22 @@ namespace VertigoShift.Gameplay.Panic
         public float lowPassClear = 22000f;
         public float lowPassPanic = 700f;
 
+        [Header("VFX Pusing")]
+        public float sipitMaks = 0.15f;   // seberapa sipit mata pas pusing penuh (bagian layar dari atas & bawah)
+        public float kedipKuat = 0.2f;    // seberapa nutup mata pas ngedip waktu CRITICAL
+        public float blurMaks = 1.2f;     // seberapa buram pas pusing penuh
+        public float goyangLensa = 0.12f; // seberapa goyang layarnya
+
         float timeSinceShift = 99f;
         AudioLowPassFilter lowPass;
+
+        // VFX
+        DepthOfField blur;
+        LensDistortion lensa;
+        Texture2D kelopakTex;
+        float sipit;
+        float kedip;
+        float jedaKedip = 2f;
 
         /// <summary>The meter mapped to 0..1.</summary>
         public float Normalized { get { return Mathf.Clamp01(value / 100f); } }
@@ -59,6 +73,31 @@ namespace VertigoShift.Gameplay.Panic
             }
         }
 
+        // VFX: volume sendiri buat blur + lensa goyang, sama tekstur kelopak mata
+        void Start()
+        {
+            Volume volume = new GameObject("Volume_Pusing").AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 50;
+            VolumeProfile profil = ScriptableObject.CreateInstance<VolumeProfile>();
+            volume.sharedProfile = profil;
+
+            blur = profil.Add<DepthOfField>(true);
+            blur.mode.Override(DepthOfFieldMode.Off);
+            lensa = profil.Add<LensDistortion>(true);
+            lensa.intensity.Override(0f);
+
+            // gradasi hitam: pekat di pinggir layar, makin ke tengah makin tipis
+            kelopakTex = new Texture2D(1, 64);
+            for (int y = 0; y < 64; y++)
+            {
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.55f, y / 63f));
+                kelopakTex.SetPixel(0, y, new Color(1f, 1f, 1f, a));
+            }
+            kelopakTex.wrapMode = TextureWrapMode.Clamp;
+            kelopakTex.Apply();
+        }
+
         public void AddDizziness(float amount)
         {
             value = Mathf.Clamp(value + amount, 0f, 100f);
@@ -85,6 +124,60 @@ namespace VertigoShift.Gameplay.Panic
                 value = Mathf.Max(0f, value - decayPerSecond * dt);
 
             ApplyFeedback();
+            UpdateVfxPusing();
+        }
+
+        // VFX: blur, layar goyang, mata sipit, ngedip
+        void UpdateVfxPusing()
+        {
+            float n = Normalized;
+            float dt = Time.unscaledDeltaTime;
+            float t = Time.unscaledTime;
+
+            // blur sama goyang mulai kerasa dari HIGH TENSION (50%)
+            float berat = Mathf.InverseLerp(0.5f, 1f, n);
+            if (blur != null)
+            {
+                blur.mode.Override(berat > 0f ? DepthOfFieldMode.Gaussian : DepthOfFieldMode.Off);
+                blur.gaussianStart.Override(Mathf.Lerp(20f, 0f, berat));
+                blur.gaussianEnd.Override(Mathf.Lerp(40f, 6f, berat));
+                blur.gaussianMaxRadius.Override(Mathf.Lerp(0.5f, blurMaks, berat));
+            }
+            if (lensa != null)
+            {
+                lensa.intensity.Override((-0.2f + Mathf.Sin(t * 1.7f) * goyangLensa) * berat);
+                lensa.center.Override(new Vector2(0.5f + Mathf.Sin(t * 0.9f) * 0.03f * berat,
+                                                  0.5f + Mathf.Cos(t * 1.3f) * 0.03f * berat));
+            }
+
+            // ngedip pelan sesekali pas CRITICAL
+            if (IsCritical)
+            {
+                jedaKedip -= dt;
+                if (jedaKedip <= 0f)
+                {
+                    kedip = 1f;
+                    jedaKedip = Random.Range(1.5f, 3.5f);
+                }
+            }
+            kedip = Mathf.MoveTowards(kedip, 0f, dt * 2.5f);
+
+            // mata makin sipit makin pusing
+            sipit = sipitMaks * n * n + Mathf.Sin(kedip * Mathf.PI) * kedipKuat;
+        }
+
+        // VFX: gambar kelopak mata atas & bawah
+        void OnGUI()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            if (kelopakTex == null || sipit <= 0.001f) return;
+
+            float h = Screen.height * sipit * 2f;
+            GUI.depth = 10; // di belakang HUD
+            GUI.color = Color.black;
+            GUI.DrawTexture(new Rect(-10f, 0f, Screen.width + 20f, h), kelopakTex);
+            GUI.DrawTextureWithTexCoords(new Rect(-10f, Screen.height - h, Screen.width + 20f, h), kelopakTex, new Rect(0f, 1f, 1f, -1f));
+            GUI.color = Color.white;
         }
 
         void ApplyFeedback()

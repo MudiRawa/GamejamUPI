@@ -223,6 +223,13 @@ namespace VertigoShift.Gameplay.Weapons
 
             if (sfx != null) sfx.PlayGunshot();
             if (look != null) look.AddFovKick(look.fireFovKick);
+
+            // VFX: recoil + getaran tiap nembak
+            if (look != null)
+            {
+                look.AddRecoil(look.recoilKick);
+                look.AddShake(look.shakeTembak);
+            }
             PlayFlash();
             DrawTracer(tracerStart, endPoint);
 
