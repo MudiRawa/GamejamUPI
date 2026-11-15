@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/MainMenu.unity
+    guid: a23cc48922e281d41b5b7bf28b8d9da3
+  - enabled: 1
     path: Assets/Scenes/VertigoShiftPrototype.unity
     guid: 806d0d13724637b4a9e61ba602673404
   - enabled: 1
