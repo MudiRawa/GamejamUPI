@@ -11,11 +11,13 @@ namespace VertigoShift.Gameplay.Targets
     /// a ranged kill gives a small breather, a close range execution clears a lot more (GDD 3.B).
     /// </summary>
     [DisallowMultipleComponent]
-    public class TargetDummy : MonoBehaviour
+    public class TargetDummy : MonoBehaviour, IDamageable
     {
         [Header("Health")]
         public float maxHealth = 100f;
         public float health = 100f;
+
+        public float Health { get { return health; } }
 
         [Header("References")]
         public DizzinessSystem dizziness;
@@ -83,15 +85,11 @@ namespace VertigoShift.Gameplay.Targets
         {
             dead = true;
 
-            // VFX musuh pecah, kalau kosong pakai gibs yang lama
+            // VFX musuh pecah
             if (vfxMusuhPecah != null)
             {
                 Vector3 arah = player != null ? transform.position - player.position : transform.forward;
                 Instantiate(vfxMusuhPecah, transform.position, Quaternion.LookRotation(arah));
-            }
-            else
-            {
-                SpawnGibs();
             }
 
             // VFX: layar geter pas musuh pecah
@@ -122,32 +120,6 @@ namespace VertigoShift.Gameplay.Targets
             if (col != null) col.enabled = true;
         }
 
-        void SpawnGibs()
-        {
-            if (gibMaterial == null) return;
 
-            for (int i = 0; i < gibCount; i++)
-            {
-                GameObject gib = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                gib.name = "Gib";
-                gib.transform.position = transform.position + Random.insideUnitSphere * 0.3f;
-                gib.transform.rotation = Random.rotation;
-                gib.transform.localScale = Vector3.one * gibSize * Random.Range(0.5f, 1.4f);
-
-                Collider gibCollider = gib.GetComponent<Collider>();
-                if (gibCollider != null) Destroy(gibCollider);
-
-                gib.GetComponent<MeshRenderer>().sharedMaterial = gibMaterial;
-
-                Rigidbody rbGib = gib.AddComponent<Rigidbody>();
-                rbGib.mass = 0.15f;
-                rbGib.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-                RigidbodyCompat.SetLinearDamping(rbGib, 0.1f);
-                rbGib.AddForce(Random.insideUnitSphere.normalized * gibLaunchSpeed, ForceMode.Impulse);
-                rbGib.AddTorque(Random.insideUnitSphere * 12f, ForceMode.Impulse);
-
-                Destroy(gib, gibLife);
-            }
-        }
     }
 }

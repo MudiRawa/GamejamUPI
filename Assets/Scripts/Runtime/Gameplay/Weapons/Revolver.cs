@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using VertigoShift.Audio;
 using VertigoShift.Gameplay.Player;
+using VertigoShift.Core;
 using VertigoShift.Gameplay.Targets;
 using VertigoShift.Input;
 
@@ -240,13 +241,13 @@ namespace VertigoShift.Gameplay.Weapons
 
             if (hasHit)
             {
-                TargetDummy target = hit.collider.GetComponentInParent<TargetDummy>();
-                if (target != null)
+                IDamageable damageable = hit.collider.GetComponentInParent<IDamageable>();
+                if (damageable != null)
                 {
-                    target.TakeDamage(damage, hit.point);
+                    damageable.TakeDamage(damage, hit.point);
 
-                    // VFX kena musuh (kalau mati, pecahnya diurus TargetDummy)
-                    if (target.health > 0f && vfxPeluruKenaMusuh != null)
+                    // VFX kena musuh (kalau masih hidup; kalau mati, pecahnya diurus target/enemy)
+                    if (damageable.Health > 0f && vfxPeluruKenaMusuh != null)
                         Instantiate(vfxPeluruKenaMusuh, hit.point, Quaternion.LookRotation(hit.normal));
 
                     // Hitstop only on a real target hit (not on walls/floor), and
