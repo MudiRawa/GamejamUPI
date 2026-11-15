@@ -8,7 +8,7 @@ using VertigoShift.UI;
 
 // Tools > VFX > Pasang VFX ke Scene
 // isi kolom VFX di Revolver, PlayerMotor, sama semua musuh di scene
-// sekalian isi gambar UI peluru di PrototypeHUD
+// sekalian isi gambar UI peluru, font sci-fi di semua HUD, sama pasang darah pemain
 public static class VFXBuilder
 {
     const string Folder = "Assets/VFX/Prefabs/";
@@ -46,6 +46,26 @@ public static class VFXBuilder
             hud.fontAngka = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Tektur-900.ttf");
             hud.fontTulisan = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Tektur-700.ttf");
             EditorUtility.SetDirty(hud);
+        }
+
+        Font angka = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Tektur-900.ttf");
+        Font tulisan = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Tektur-700.ttf");
+
+        foreach (WaveHUD wave in Object.FindObjectsByType<WaveHUD>(FindObjectsSortMode.None))
+        {
+            wave.fontAngka = angka;
+            wave.fontTulisan = tulisan;
+            EditorUtility.SetDirty(wave);
+        }
+
+        // darah pemain: pasang PlayerHealth ke Player kalau belum ada
+        foreach (PlayerMotor motor in Object.FindObjectsByType<PlayerMotor>(FindObjectsSortMode.None))
+        {
+            PlayerHealth darah = motor.GetComponent<PlayerHealth>();
+            if (darah == null) darah = motor.gameObject.AddComponent<PlayerHealth>();
+            darah.fontAngka = angka;
+            darah.fontTulisan = tulisan;
+            EditorUtility.SetDirty(darah);
         }
 
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());

@@ -25,6 +25,9 @@ namespace VertigoShift.Gameplay.Enemies
         public Transform player;
         public DizzinessSystem dizziness;
         public GameObject vfxMusuhPecah;
+        public GameObject vfxMuncul;     // VFX: pas musuh muncul
+        public GameObject vfxNgisi;      // VFX: tanda musuh mau nembak
+        public float waktuNgisi = 0.5f;  // VFX: tandanya muncul berapa detik sebelum nembak
 
         [Header("Movement")]
         [Tooltip("How fast the enemy walks toward the player (m/s).")]
@@ -40,6 +43,7 @@ namespace VertigoShift.Gameplay.Enemies
         public Transform muzzle;
         public float fireInterval = 2f;
         public float range = 40f;
+        public float damage = 10f;   // darah pemain yang ilang tiap kena tembak
         [Tooltip("Layers the enemy shot can hit (walls, cover).")]
         public LayerMask hitMask = Physics.DefaultRaycastLayers;
         public GameObject vfxTembakan;
@@ -88,6 +92,11 @@ namespace VertigoShift.Gameplay.Enemies
         public Color highlightColor = new Color(1f, 0.85f, 0.2f);
         bool highlighted;
         float lastSeenTime;
+
+        // VFX: muncul pelan dari 0, sama mental dikit pas ketembak
+        Vector3 skalaAsli;
+        float muncul, pukul;
+        GameObject ngisi;
 
         /// <summary>Fired when this enemy dies (used by wave spawners).</summary>
         public System.Action<Enemy> onDeath;
@@ -139,12 +148,23 @@ namespace VertigoShift.Gameplay.Enemies
             lastSeenTime = Time.time;
 
             nextFireTime = Time.time + Random.Range(0.5f, fireInterval);
+
+            // VFX: muncul
+            skalaAsli = transform.localScale;
+            muncul = 0f;
+            transform.localScale = Vector3.zero;
+            if (vfxMuncul != null) Instantiate(vfxMuncul, transform.position, Quaternion.LookRotation(surfaceUp));
         }
 
         void Update()
         {
             // FX timers (unscaled so they survive hitstop).
             UpdateFxTimers(Time.unscaledDeltaTime);
+
+            // VFX: membesar pas muncul, mental dikit pas ketembak
+            muncul = Mathf.MoveTowards(muncul, 1f, Time.deltaTime / 0.35f);
+            pukul = Mathf.MoveTowards(pukul, 0f, Time.deltaTime * 6f);
+            transform.localScale = skalaAsli * (Mathf.SmoothStep(0f, 1f, muncul) * (1f + 0.3f * pukul));
 
             if (flashTimer > 0f)
             {
@@ -278,6 +298,13 @@ namespace VertigoShift.Gameplay.Enemies
             // Highlight if the player hasn't seen/shot this enemy for a while.
             UpdateHighlight();
 
+            // VFX: tanda mau nembak, muncul sebentar sebelum peluru keluar
+            if (vfxNgisi != null && ngisi == null && dist <= range && Time.time >= nextFireTime - waktuNgisi)
+            {
+                Vector3 asal = muzzle != null ? muzzle.position : transform.position + Vector3.up * 0.5f;
+                ngisi = Instantiate(vfxNgisi, asal, transform.rotation, transform);
+            }
+
             // Shooting.
             if (Time.time >= nextFireTime && dist <= range)
             {
@@ -298,6 +325,7 @@ namespace VertigoShift.Gameplay.Enemies
                 {
                     Fire(origin, dir);
                     nextFireTime = Time.time + fireInterval;
+                    ngisi = null; // VFX: biar tembakan berikutnya ada tandanya lagi
                 }
                 else
                 {
@@ -328,6 +356,23 @@ namespace VertigoShift.Gameplay.Enemies
                 if (vfxImpact != null)
                     Instantiate(vfxImpact, hit.point, Quaternion.LookRotation(hit.normal));
             }
+
+            // pemain ada di layer Ignore Raycast jadi nggak kena raycast,
+            // makanya dicek manual: pelurunya lewat deket pemain & nggak ketahan tembok duluan
+            if (player != null)
+            {
+                float jarakKePemain = Vector3.Dot(player.position - origin, dir);
+                Vector3 titikTerdekat = origin + dir * jarakKePemain;
+                bool lewatPemain = jarakKePemain > 0f && Vector3.Distance(titikTerdekat, player.position) < 1.5f;
+                bool ketahan = hasHit && hit.distance < jarakKePemain - 0.5f;
+                if (lewatPemain && !ketahan)
+                {
+                    // kena: kurangin darah pemain (PlayerHealth yang ngurus efek layar merah & kalah)
+                    PlayerHealth darah = player.GetComponentInParent<PlayerHealth>();
+                    if (darah == null) darah = player.gameObject.AddComponent<PlayerHealth>();
+                    darah.TakeDamage(damage, origin);
+                }
+            }
         }
 
         public void TakeDamage(float amount, Vector3 hitPoint)
@@ -335,6 +380,7 @@ namespace VertigoShift.Gameplay.Enemies
             if (dead) return;
             health -= amount;
             flashTimer = 0.15f;
+            pukul = 1f; // VFX: mental dikit
             lastSeenTime = Time.time;
             if (highlighted) SetHighlighted(false);
 
@@ -415,6 +461,8 @@ namespace VertigoShift.Gameplay.Enemies
 
             health = maxHealth;
             dead = false;
+            muncul = 0f; // VFX: muncul lagi dari kecil
+            if (vfxMuncul != null) Instantiate(vfxMuncul, transform.position, Quaternion.LookRotation(surfaceUp));
             highlighted = false;
             lastSeenTime = Time.time;
             if (highlight != null) highlight.gameObject.SetActive(false);

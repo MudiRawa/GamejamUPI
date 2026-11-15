@@ -131,6 +131,9 @@ MonoBehaviour:
   player: {fileID: 0}
   dizziness: {fileID: 0}
   vfxMusuhPecah: {fileID: 5529959743598239145, guid: 998a422cdfc0c8e488334fda28c849be, type: 3}
+  vfxMuncul: {fileID: 8320404591889639544, guid: 0e07a0915872f1f469506f1b8fde4fb6, type: 3}
+  vfxNgisi: {fileID: 9017099559487991105, guid: c53927ba18301044cb923f0f3df3deb9, type: 3}
+  waktuNgisi: 0.5
   moveSpeed: 1.5
   stopDistance: 2
   surfaceUp: {x: 0, y: 1, z: 0}

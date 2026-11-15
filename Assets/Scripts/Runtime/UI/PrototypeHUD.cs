@@ -69,93 +69,86 @@ namespace VertigoShift.UI
             GUI.color = Color.white;
         }
 
+        GUIStyle gayaKiri; // tulisan kecil rata kiri
+
+        // tulisan gravity kecil di bawah panel pusing
         void DrawGravity()
         {
             if (gravity == null) return;
+            if (gayaKiri == null) gayaKiri = BuatGaya(fontTulisan, 14, TextAnchor.MiddleLeft);
             string side = gravity.CurrentSide.ToString().ToUpperInvariant();
             int streak = gravity.ShiftStreak;
 
-            GUI.Label(new Rect(18f, 16f, 520f, 26f), "GRAVITY  " + side + (streak > 1 ? "   SPAM x" + streak : ""), title);
-
-            Color c = gravity.CurrentSide == GravitySide.Floor ? new Color(0.5f, 0.9f, 1f)
-                    : gravity.CurrentSide == GravitySide.Ceiling ? new Color(1f, 0.85f, 0.4f)
-                    : new Color(0.85f, 0.6f, 1f);
-            GUI.color = c;
-            GUI.Label(new Rect(18f, 40f, 520f, 20f), "1 Floor / 2 Left / 3 Ceiling / 4 Right  -  Q / E rotate", body);
+            GUI.color = new Color(1f, 1f, 1f, 0.6f);
+            GUI.Label(new Rect(30f, 112f, 300f, 20f), "GRAVITY  " + side + (streak > 1 ? "  x" + streak : ""), gayaKiri);
             GUI.color = Color.white;
         }
 
-        // ---------------- HUD BAR PUSING ----------------
+        // ---------------- HUD PUSING (kiri atas) ----------------
+        // gayanya sama kayak HUD revolver: label kecil cyan, garis tipis, angka gede, bar tipis
         float pusingTampil;   // isi bar yang ditampilin (naiknya halus)
-        float getar;          // bar geter pas pusing naik
-        GUIStyle gayaKanan;   // tulisan rata kanan
+        float getar;          // geter pas pusing naik
+        GUIStyle gayaPusingAngka, gayaPusingKecil, gayaStatus;
 
         void DrawDizziness()
         {
             if (dizziness == null) return;
-            if (gayaKanan == null)
+            if (gayaPusingAngka == null)
             {
-                gayaKanan = new GUIStyle(title);
-                gayaKanan.alignment = TextAnchor.MiddleRight;
+                gayaPusingAngka = BuatGaya(fontAngka, 40, TextAnchor.MiddleLeft);
+                gayaPusingKecil = BuatGaya(fontTulisan, 16, TextAnchor.MiddleLeft);
+                gayaStatus = BuatGaya(fontTulisan, 14, TextAnchor.MiddleRight);
+                if (gayaKiri == null) gayaKiri = BuatGaya(fontTulisan, 14, TextAnchor.MiddleLeft);
             }
 
             float n = dizziness.Normalized;
             float dt = Time.unscaledDeltaTime;
-
-            // gerakin animasinya sekali per frame aja
             if (Event.current.type == EventType.Repaint)
             {
-                if (n > pusingTampil + 0.01f) getar = 1f; // pusing naik -> bar geter
+                if (n > pusingTampil + 0.01f) getar = 1f;
                 pusingTampil = Mathf.Lerp(pusingTampil, n, 10f * dt);
                 getar = Mathf.MoveTowards(getar, 0f, 3f * dt);
             }
 
-            // warna: biru -> kuning -> merah
-            Color warna = new Color(0.16f, 0.94f, 1f);
+            Color cyan = new Color(0.16f, 0.94f, 1f);
+            Color warna = cyan;
             string status = "STABIL";
-            if (dizziness.IsHighTension)
-            {
-                warna = new Color(1f, 0.8f, 0.2f);
-                status = "TEGANG";
-            }
+            if (dizziness.IsHighTension) { warna = new Color(1f, 0.82f, 0.23f); status = "TEGANG"; }
             if (dizziness.IsCritical)
             {
                 warna = new Color(1f, 0.25f, 0.25f);
-                status = "PANIK!";
+                status = "PANIK";
+                warna.a = 0.4f + Mathf.PingPong(Time.unscaledTime * 3f, 0.6f);
             }
 
-            // pas panik bar kedip-kedip
-            Color warnaBar = warna;
-            if (dizziness.IsCritical) warnaBar.a = 0.5f + Mathf.PingPong(Time.unscaledTime * 3f, 0.5f);
+            float x = 30f + Random.Range(-1f, 1f) * getar * 4f;
+            float y = 18f + Random.Range(-1f, 1f) * getar * 4f;
+            float panjang = 220f;
 
-            // posisi di pojok kiri bawah, ikut geter
-            float x = 30f + Random.Range(-1f, 1f) * getar * 6f;
-            float y = Screen.height - 50f + Random.Range(-1f, 1f) * getar * 6f;
+            // label + garis
+            TulisGlow(new Rect(x, y, 120f, 20f), "PUSING", gayaKiri, cyan);
+            GUI.color = new Color(cyan.r, cyan.g, cyan.b, 0.6f);
+            GUI.DrawTexture(new Rect(x, y + 22f, panjang, 2f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(x + panjang, y + 19f, 6f, 8f), Texture2D.whiteTexture);
 
-            // 20 kotak kecil
-            int jumlah = 20;
-            float lebar = 13f;
-            float jarak = 3f;
-            float tinggi = 14f;
-            float panjang = jumlah * (lebar + jarak) - jarak;
-            int nyala = Mathf.RoundToInt(pusingTampil * jumlah);
-
-            for (int i = 0; i < jumlah; i++)
-            {
-                GUI.color = i < nyala ? warnaBar : new Color(1f, 1f, 1f, 0.15f);
-                GUI.DrawTexture(new Rect(x + i * (lebar + jarak), y, lebar, tinggi), Texture2D.whiteTexture);
-            }
-
-            // garis batas TEGANG (50%) sama PANIK (85%)
-            GUI.color = new Color(1f, 1f, 1f, 0.8f);
-            GUI.DrawTexture(new Rect(x + panjang * 0.5f - 1f, y - 4f, 2f, tinggi + 8f), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(x + panjang * 0.85f - 1f, y - 4f, 2f, tinggi + 8f), Texture2D.whiteTexture);
-
-            // tulisan di atas bar
-            GUI.color = Color.white;
-            GUI.Label(new Rect(x, y - 28f, 120f, 24f), "PUSING", title);
+            // angka persen + status
+            string angka = Mathf.RoundToInt(dizziness.value).ToString();
+            TulisGlow(new Rect(x, y + 26f, 120f, 46f), angka, gayaPusingAngka, Color.white);
+            float lebarAngka = gayaPusingAngka.CalcSize(new GUIContent(angka)).x;
+            GUI.color = new Color(1f, 1f, 1f, 0.55f);
+            GUI.Label(new Rect(x + lebarAngka + 4f, y + 40f, 40f, 24f), "%", gayaPusingKecil);
             GUI.color = warna;
-            GUI.Label(new Rect(x + panjang - 200f, y - 28f, 200f, 24f), Mathf.RoundToInt(dizziness.value) + "%  " + status, gayaKanan);
+            GUI.Label(new Rect(x + panjang - 120f, y + 38f, 120f, 24f), status, gayaStatus);
+
+            // bar tipis + takik 50% & 85%
+            float by = y + 76f;
+            GUI.color = new Color(1f, 1f, 1f, 0.15f);
+            GUI.DrawTexture(new Rect(x, by, panjang, 4f), Texture2D.whiteTexture);
+            GUI.color = warna;
+            GUI.DrawTexture(new Rect(x, by, panjang * pusingTampil, 4f), Texture2D.whiteTexture);
+            GUI.color = new Color(1f, 1f, 1f, 0.6f);
+            GUI.DrawTexture(new Rect(x + panjang * 0.5f - 1f, by - 3f, 2f, 10f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(x + panjang * 0.85f - 1f, by - 3f, 2f, 10f), Texture2D.whiteTexture);
             GUI.color = Color.white;
         }
 
@@ -363,6 +356,9 @@ namespace VertigoShift.UI
 
         void DrawStats()
         {
+            // info debug, cuma muncul pas F1 ditahan biar layar bersih
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard == null || !keyboard.f1Key.isPressed) return;
             string speed = motor != null ? motor.CurrentSpeed.ToString("0.0") + " m/s" : "-";
             string grounded = motor != null ? (motor.IsGrounded ? "GROUND" : "AIR") : "-";
             string slide = motor != null && motor.IsSliding ? "  SLIDE" : "";
