@@ -41,10 +41,12 @@ namespace VertigoShift.Gameplay.Panic
         // VFX
         DepthOfField blur;
         LensDistortion lensa;
-        Texture2D kelopakTex;
         float sipit;
         float kedip;
         float jedaKedip = 2f;
+
+        /// <summary>0 = mata normal, makin besar makin "sipit" (dipakai PanicVignette).</summary>
+        public float Sipit { get { return sipit; } }
 
         /// <summary>The meter mapped to 0..1.</summary>
         public float Normalized { get { return Mathf.Clamp01(value / 100f); } }
@@ -86,16 +88,6 @@ namespace VertigoShift.Gameplay.Panic
             blur.mode.Override(DepthOfFieldMode.Off);
             lensa = profil.Add<LensDistortion>(true);
             lensa.intensity.Override(0f);
-
-            // gradasi hitam: pekat di pinggir layar, makin ke tengah makin tipis
-            kelopakTex = new Texture2D(1, 64);
-            for (int y = 0; y < 64; y++)
-            {
-                float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.55f, y / 63f));
-                kelopakTex.SetPixel(0, y, new Color(1f, 1f, 1f, a));
-            }
-            kelopakTex.wrapMode = TextureWrapMode.Clamp;
-            kelopakTex.Apply();
         }
 
         public void AddDizziness(float amount)
@@ -166,19 +158,7 @@ namespace VertigoShift.Gameplay.Panic
             sipit = sipitMaks * n * n + Mathf.Sin(kedip * Mathf.PI) * kedipKuat;
         }
 
-        // VFX: gambar kelopak mata atas & bawah
-        void OnGUI()
-        {
-            if (Event.current.type != EventType.Repaint) return;
-            if (kelopakTex == null || sipit <= 0.001f) return;
-
-            float h = Screen.height * sipit * 2f;
-            GUI.depth = 10; // di belakang HUD
-            GUI.color = Color.black;
-            GUI.DrawTexture(new Rect(-10f, 0f, Screen.width + 20f, h), kelopakTex);
-            GUI.DrawTextureWithTexCoords(new Rect(-10f, Screen.height - h, Screen.width + 20f, h), kelopakTex, new Rect(0f, 1f, 1f, -1f));
-            GUI.color = Color.white;
-        }
+        // VFX kelopak mata sekarang digambar oleh PanicVignette (Canvas/uGUI).
 
         void ApplyFeedback()
         {

@@ -49,8 +49,21 @@ namespace VertigoShift.Gameplay.Enemies
         public GameObject vfxTembakan;
         public GameObject vfxPeluruTrail;
         public GameObject vfxImpact;
+        public GameObject vfxPeluruKenaPemain;   // VFX: peluru kena pemain (template slot)
         public LineRenderer tracer;
         public Light muzzleFlash;
+
+        [Header("Projectile (tidak auto-kenna)")]
+        [Tooltip("Prefab projectile musuh. Kalau kosong, dibuat runtime (template).")]
+        public GameObject enemyProjectilePrefab;
+        [Tooltip("Kecepatan peluru musuh (m/s).")]
+        public float projectileSpeed = 30f;
+        [Tooltip("Jarak toleransi kena pemain (m). Kecil = tidak auto-kenna.")]
+        public float projectileHitRadius = 0.6f;
+        [Tooltip("Gravitasi peluru (0 = lurus).")]
+        public float projectileGravity = 0f;
+        [Tooltip("Sebaran aim (derajat). Lebih besar = kurang akurat = tidak auto-kenna.")]
+        public float aimSpread = 4f;
         [Tooltip("Optional sound bank; if null, shooting is silent.")]
         public SfxBank sfx;
 
@@ -101,6 +114,13 @@ namespace VertigoShift.Gameplay.Enemies
         /// <summary>Fired when this enemy dies (used by wave spawners).</summary>
         public System.Action<Enemy> onDeath;
 
+        void OnValidate()
+        {
+            if (projectileSpeed < 1f) projectileSpeed = 30f;
+            if (projectileHitRadius < 0.1f) projectileHitRadius = 0.6f;
+            if (aimSpread < 0f) aimSpread = 0f;
+        }
+
         void Awake()
         {
             col = GetComponent<Collider>();
@@ -111,6 +131,9 @@ namespace VertigoShift.Gameplay.Enemies
             if (muzzleFlashDuration < 0.001f) muzzleFlashDuration = 0.001f;
             if (fireInterval < 0.1f) fireInterval = 0.1f;
             if (moveSpeed < 0f) moveSpeed = 0f;
+            if (projectileSpeed < 1f) projectileSpeed = 30f;
+            if (projectileHitRadius < 0.1f) projectileHitRadius = 0.6f;
+            if (aimSpread < 0f) aimSpread = 0f;
         }
 
         void Start()
@@ -313,12 +336,22 @@ namespace VertigoShift.Gameplay.Enemies
                 Vector3 dir = (aimPoint - origin).normalized;
                 if (dir.sqrMagnitude < 0.0001f) dir = transform.forward;
 
+                // Spread: tembakan tidak auto-kenna, musuh tidak aim sempurna.
+                if (aimSpread > 0f)
+                {
+                    Quaternion spreadRot = Quaternion.Euler(
+                        Random.Range(-aimSpread, aimSpread),
+                        Random.Range(-aimSpread, aimSpread),
+                        0f);
+                    dir = (spreadRot * dir).normalized;
+                }
+
                 // Line of sight check.
                 bool blocked = false;
                 RaycastHit losHit;
                 if (Physics.Raycast(origin, dir, out losHit, range, hitMask, QueryTriggerInteraction.Ignore))
                 {
-                    if (losHit.distance < dist - 0.5f) blocked = true;
+                    if (losHit.distance < dist - 0.1f) blocked = true;
                 }
 
                 if (!blocked)
@@ -339,40 +372,42 @@ namespace VertigoShift.Gameplay.Enemies
         {
             if (sfx != null) sfx.PlayGunshot();
 
-            Vector3 endPoint = origin + dir * range;
-            RaycastHit hit;
-            bool hasHit = Physics.Raycast(origin, dir, out hit, range, hitMask, QueryTriggerInteraction.Ignore);
-            if (hasHit) endPoint = hit.point;
-
+            // VFX: muzzle flash + efek tembakan di moncong
             PlayFlash();
-            DrawTracer(origin, endPoint);
-
             Quaternion rot = Quaternion.LookRotation(dir);
             if (vfxTembakan != null) Instantiate(vfxTembakan, origin, rot, muzzle);
-            if (vfxPeluruTrail != null) Instantiate(vfxPeluruTrail, origin, rot);
 
-            if (hasHit)
+            // Tracer pendek di moncong (opsional, null di prefab default)
+            DrawTracer(origin, origin + dir * Mathf.Min(6f, range));
+
+            // --- PELURU (tidak auto-kenna): spawn projectile yang butuh waktu tempuh ---
+            // Template: gampang tambah efek, isi slot vfxPeluruTrail/vfxImpact/vfxPeluruKenaPemain
+            // di prefab Enemy atau lewat VFXBuilder.
+            GameObject projGo;
+            if (enemyProjectilePrefab != null)
             {
-                if (vfxImpact != null)
-                    Instantiate(vfxImpact, hit.point, Quaternion.LookRotation(hit.normal));
+                projGo = Instantiate(enemyProjectilePrefab, origin, Quaternion.LookRotation(dir));
+            }
+            else
+            {
+                projGo = new GameObject("EnemyProjectile");
+                projGo.transform.SetPositionAndRotation(origin, Quaternion.LookRotation(dir));
             }
 
-            // pemain ada di layer Ignore Raycast jadi nggak kena raycast,
-            // makanya dicek manual: pelurunya lewat deket pemain & nggak ketahan tembok duluan
-            if (player != null)
-            {
-                float jarakKePemain = Vector3.Dot(player.position - origin, dir);
-                Vector3 titikTerdekat = origin + dir * jarakKePemain;
-                bool lewatPemain = jarakKePemain > 0f && Vector3.Distance(titikTerdekat, player.position) < 1.5f;
-                bool ketahan = hasHit && hit.distance < jarakKePemain - 0.5f;
-                if (lewatPemain && !ketahan)
-                {
-                    // kena: kurangin darah pemain (PlayerHealth yang ngurus efek layar merah & kalah)
-                    PlayerHealth darah = player.GetComponentInParent<PlayerHealth>();
-                    if (darah == null) darah = player.gameObject.AddComponent<PlayerHealth>();
-                    darah.TakeDamage(damage, origin);
-                }
-            }
+            EnemyProjectile proj = projGo.GetComponent<EnemyProjectile>();
+            if (proj == null) proj = projGo.AddComponent<EnemyProjectile>();
+
+            // isi parameter + slot VFX (template) dari Enemy, biar efek musuh mudah diganti
+            proj.speed = projectileSpeed;
+            proj.damage = damage;
+            proj.gravity = projectileGravity;
+            proj.hitRadius = projectileHitRadius;
+            proj.hitMask = hitMask;
+            proj.vfxTrail = vfxPeluruTrail;
+            proj.vfxImpact = vfxImpact;
+            proj.vfxHitPlayer = vfxPeluruKenaPemain;
+
+            proj.Launch(origin, dir, damage, player, transform, Vector3.up * 1.0f);
         }
 
         public void TakeDamage(float amount, Vector3 hitPoint)

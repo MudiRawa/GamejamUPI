@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1f3eb7937430dc43a2bdc7d438f7b96, type: 3}
+  m_Name: UITheme
+  m_EditorClassIdentifier: VertigoShift.Runtime::VertigoShift.UI.UITheme
+  magenta: {r: 1, g: 0.15, b: 0.7, a: 1}
+  cyan: {r: 0.16, g: 0.94, b: 1, a: 1}
+  merah: {r: 1, g: 0.2, b: 0.25, a: 1}
+  kuning: {r: 1, g: 0.82, b: 0.23, a: 1}
+  oranye: {r: 1, g: 0.45, b: 0.1, a: 1}
+  teksPutih: {r: 1, g: 1, b: 1, a: 1}
+  teksAbu: {r: 0.68, g: 0.78, b: 0.88, a: 1}
+  panelLatar: {r: 0, g: 0, b: 0, a: 0.55}
+  garisCyan: {r: 0.16, g: 0.94, b: 1, a: 0.6}
+  fontJudul: {fileID: 12800000, guid: dacdd1e0f75ee6748ae4ea9e2f06cda3, type: 3}
+  fontTulisan: {fileID: 12800000, guid: 737ad7eacf9ca784380ee09ee3b2b3ae, type: 3}
+  fontAngka: {fileID: 12800000, guid: dacdd1e0f75ee6748ae4ea9e2f06cda3, type: 3}
+  ukuranJudul: 100
+  ukuranTombol: 46
+  ukuranTulisan: 22
+  ukuranKecil: 14
+  ukuranAngkaBesar: 56
+  ukuranAngkaSedang: 40
+  durasiFade: 0.3
+  kecepatanGetar: 15

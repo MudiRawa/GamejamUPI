@@ -142,14 +142,21 @@ MonoBehaviour:
   muzzle: {fileID: 0}
   fireInterval: 2
   range: 40
+  damage: 10
   hitMask:
     serializedVersion: 2
     m_Bits: 51
   vfxTembakan: {fileID: 2963336292161520956, guid: 85125b380bbfccb4d901de87b5e66f8f, type: 3}
   vfxPeluruTrail: {fileID: 1633412505049725419, guid: ec092234c5c1fb8459b46b0ca32fd628, type: 3}
   vfxImpact: {fileID: 3615627361351046594, guid: 6cf1ef1f01049ad43929c91f2a8f7118, type: 3}
+  vfxPeluruKenaPemain: {fileID: 0}
   tracer: {fileID: 0}
   muzzleFlash: {fileID: 0}
+  enemyProjectilePrefab: {fileID: 0}
+  projectileSpeed: 30
+  projectileHitRadius: 0.6
+  projectileGravity: 0
+  aimSpread: 4
   sfx: {fileID: 0}
   tracerDuration: 0.05
   muzzleFlashIntensity: 8

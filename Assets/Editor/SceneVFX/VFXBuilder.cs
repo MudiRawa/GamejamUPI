@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using VertigoShift.Gameplay.Enemies;
 using VertigoShift.Gameplay.Player;
 using VertigoShift.Gameplay.Targets;
 using VertigoShift.Gameplay.Weapons;
@@ -35,6 +36,16 @@ public static class VFXBuilder
         foreach (TargetDummy musuh in Object.FindObjectsByType<TargetDummy>(FindObjectsSortMode.None))
         {
             musuh.vfxMusuhPecah = Ambil("VFX_MusuhPecah");
+            EditorUtility.SetDirty(musuh);
+        }
+
+        // Enemy: isi slot VFX tembakan (template) biar efek musuh mudah diganti
+        foreach (Enemy musuh in Object.FindObjectsByType<Enemy>(FindObjectsSortMode.None))
+        {
+            musuh.vfxTembakan = Ambil("VFX_TembakanRevolver");
+            musuh.vfxPeluruTrail = Ambil("VFX_PeluruTrail");
+            musuh.vfxImpact = Ambil("VFX_ImpactPeluru");
+            musuh.vfxPeluruKenaPemain = Ambil("VFX_PeluruKenaMusuh");
             EditorUtility.SetDirty(musuh);
         }
 

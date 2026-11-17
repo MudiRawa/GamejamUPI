@@ -22,11 +22,15 @@ namespace VertigoShift.Gameplay.Player
 
         public bool Mati { get; private set; }
 
+        /// <summary>0 = layar normal, 1 = layar gelap penuh (dipakai HealthDisplay).</summary>
+        public float Kegelapan { get { return gelap; } }
+        public int WaveTerakhir { get { return waveTerakhir; } }
+        public float WaktuMati { get { return waktuMati; } }
+
         float gelap;          // 0 = layar normal, 1 = item
         float waktuMati;
         int waveTerakhir;
         float darahTampil;
-        GUIStyle gayaJudul, gayaWave, gayaKecil, gayaAngka;
 
         void Start()
         {
@@ -82,85 +86,9 @@ namespace VertigoShift.Gameplay.Player
             }
         }
 
-        void OnGUI()
+        void OnGUI_Dihapus()
         {
-            if (gayaJudul == null)
-            {
-                gayaJudul = Gaya(fontAngka, 72, TextAnchor.MiddleCenter);
-                gayaWave = Gaya(fontTulisan, 26, TextAnchor.MiddleCenter);
-                gayaKecil = Gaya(fontTulisan, 16, TextAnchor.MiddleCenter);
-                gayaAngka = Gaya(fontAngka, 22, TextAnchor.MiddleLeft);
-            }
-
-            if (!Mati) GambarDarah();
-            else GambarKalah();
-        }
-
-        // bar darah di pojok kiri bawah
-        void GambarDarah()
-        {
-            float lebar = 260f, tinggi = 10f;
-            float x = 30f;
-            float y = Screen.height - 40f;
-            float isi = darahTampil / darahMaks;
-            bool kritis = isi < 0.3f;
-
-            GUI.color = new Color(0.06f, 0.06f, 0.07f, 0.85f);
-            GUI.DrawTexture(new Rect(x - 2f, y - 2f, lebar + 4f, tinggi + 4f), Texture2D.whiteTexture);
-            Color warna = kritis ? new Color(0.92f, 0.2f, 0.2f) : new Color(0.94f, 0.93f, 0.89f);
-            if (kritis) warna.a = 0.5f + Mathf.PingPong(Time.unscaledTime * 3f, 0.5f);
-            GUI.color = warna;
-            GUI.DrawTexture(new Rect(x, y, lebar * isi, tinggi), Texture2D.whiteTexture);
-
-            GUI.color = new Color(0f, 0f, 0f, 0.8f);
-            GUI.Label(new Rect(x + 2f, y - 30f, 200f, 28f), Mathf.CeilToInt(darah).ToString(), gayaAngka);
-            GUI.color = warna;
-            GUI.Label(new Rect(x, y - 32f, 200f, 28f), Mathf.CeilToInt(darah).ToString(), gayaAngka);
-            GUI.color = Color.white;
-        }
-
-        // layar gelap + tulisan kalah
-        void GambarKalah()
-        {
-            GUI.depth = -100; // paling depan, nutup HUD lain
-            Rect layar = new Rect(0f, 0f, Screen.width, Screen.height);
-            GUI.color = new Color(0f, 0f, 0f, gelap * 0.92f);
-            GUI.DrawTexture(layar, Texture2D.whiteTexture);
-
-            // tulisan muncul setelah layar setengah gelap
-            float a = Mathf.Clamp01((gelap - 0.5f) * 2f);
-            if (a <= 0f) { GUI.color = Color.white; return; }
-            float cy = Screen.height * 0.42f;
-
-            Tulis(new Rect(0f, cy - 60f, Screen.width, 90f), "KAMU TUMBANG", gayaJudul, new Color(0.92f, 0.2f, 0.2f, a));
-            Tulis(new Rect(0f, cy + 30f, Screen.width, 40f), "BERTAHAN SAMPAI WAVE " + waveTerakhir, gayaWave, new Color(0.94f, 0.93f, 0.89f, a));
-
-            if (Time.unscaledTime - waktuMati > 2f)
-            {
-                float kedip = 0.35f + Mathf.PingPong(Time.unscaledTime, 0.65f);
-                Tulis(new Rect(0f, cy + 110f, Screen.width, 30f), "klik di mana aja buat balik ke menu", gayaKecil, new Color(1f, 1f, 1f, a * kedip));
-            }
-            GUI.color = Color.white;
-        }
-
-        static void Tulis(Rect r, string teks, GUIStyle gaya, Color warna)
-        {
-            GUI.color = new Color(0f, 0f, 0f, warna.a);
-            GUI.Label(new Rect(r.x + 4f, r.y + 4f, r.width, r.height), teks, gaya);
-            GUI.color = warna;
-            GUI.Label(r, teks, gaya);
-        }
-
-        static GUIStyle Gaya(Font font, int ukuran, TextAnchor rata)
-        {
-            GUIStyle gaya = new GUIStyle(GUI.skin.label);
-            gaya.font = font;
-            gaya.fontSize = ukuran;
-            gaya.alignment = rata;
-            gaya.normal.textColor = Color.white;
-            gaya.clipping = TextClipping.Overflow;
-            if (font == null) gaya.fontStyle = FontStyle.Bold;
-            return gaya;
+            // UI darah & layar kalah sekarang ada di HealthDisplay (Canvas/uGUI).
         }
     }
 }
