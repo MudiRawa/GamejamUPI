@@ -136,6 +136,7 @@ namespace VertigoShift.Gameplay.Enemies
                 return;
             }
 
+            Vector3 sebelum = transform.position;
             transform.position += step;
             if (velocity.sqrMagnitude > 0.0001f)
                 transform.rotation = Quaternion.LookRotation(dir);
@@ -143,7 +144,10 @@ namespace VertigoShift.Gameplay.Enemies
             if (targetPlayer != null)
             {
                 Vector3 playerCenter = targetPlayer.position + targetCenterOffset;
-                float dist = Vector3.Distance(transform.position, playerCenter);
+                // dicek sepanjang langkah frame ini, bukan cuma titik akhirnya,
+                // biar peluru cepet / fps rendah nggak "nembus" pemain
+                Vector3 titikTerdekat = TitikTerdekat(sebelum, transform.position, playerCenter);
+                float dist = Vector3.Distance(titikTerdekat, playerCenter);
                 if (dist <= hitRadius)
                 {
                     Vector3 toPlayer = playerCenter - transform.position;
@@ -192,6 +196,13 @@ namespace VertigoShift.Gameplay.Enemies
                     }
                 }
             }
+        }
+
+        static Vector3 TitikTerdekat(Vector3 a, Vector3 b, Vector3 p)
+        {
+            Vector3 ab = b - a;
+            float t = ab.sqrMagnitude > 0.000001f ? Mathf.Clamp01(Vector3.Dot(p - a, ab) / ab.sqrMagnitude) : 0f;
+            return a + ab * t;
         }
 
         void DestroySelf()

@@ -34,6 +34,9 @@ namespace VertigoShift.Gameplay.Enemies
         public float moveSpeed = 1.5f;
         [Tooltip("Stop this far from the player to avoid overlapping.")]
         public float stopDistance = 2f;
+        [Tooltip("Musuh suka jaga jarak segini dari pemain: kejauhan maju, kedeketan mundur, di tengah muter-muter.")]
+        public float jarakIdealMin = 6f;
+        public float jarakIdealMax = 14f;
         [Tooltip("Surface normal the enemy sticks to (feet direction). Auto-detected at spawn if autoDetectSurface is on.")]
         public Vector3 surfaceUp = Vector3.up;
         public bool autoDetectSurface = true;
@@ -62,8 +65,10 @@ namespace VertigoShift.Gameplay.Enemies
         public float projectileHitRadius = 0.6f;
         [Tooltip("Gravitasi peluru (0 = lurus).")]
         public float projectileGravity = 0f;
-        [Tooltip("Sebaran aim (derajat). Lebih besar = kurang akurat = tidak auto-kenna.")]
+        [Tooltip("Nggak dipakai lagi, diganti melesetMeter.")]
         public float aimSpread = 4f;
+        [Tooltip("Peluru meleset maksimal segini (meter) dari badan pemain. 0 = selalu pas.")]
+        public float melesetMeter = 0.45f;
         [Tooltip("Optional sound bank; if null, shooting is silent.")]
         public SfxBank sfx;
 
@@ -110,6 +115,15 @@ namespace VertigoShift.Gameplay.Enemies
         Vector3 skalaAsli;
         float muncul, pukul;
         GameObject ngisi;
+
+        // gerak: kecepatan sekarang, arah muter, dan daftar semua musuh (biar nggak numpuk)
+        Vector3 kecepatan;
+        float arahSamping = 1f, waktuGantiArah;
+        PlayerMotor motorPemain;
+        static readonly System.Collections.Generic.List<Enemy> semuaMusuh = new System.Collections.Generic.List<Enemy>();
+
+        void OnEnable() { if (!semuaMusuh.Contains(this)) semuaMusuh.Add(this); }
+        void OnDisable() { semuaMusuh.Remove(this); }
 
         /// <summary>Fired when this enemy dies (used by wave spawners).</summary>
         public System.Action<Enemy> onDeath;
@@ -211,164 +225,168 @@ namespace VertigoShift.Gameplay.Enemies
             if (dead) return;
             if (player == null) return;
 
-            // Grounding & gravity along the current surface so enemies do not float.
+            // ---- nempel ke permukaan
+            // permukaannya dikunci dari pas spawn, jadi musuh nggak tiba-tiba miring / loncat ke atas box
             Vector3 up = surfaceUp;
+            float setengahTinggi = Mathf.Max(0.1f, skalaAsli.y * 0.5f); // pakai skala asli, bukan skala animasi
             RaycastHit groundHit;
-            bool foundGround = Physics.Raycast(transform.position, -up, out groundHit, groundCheckDistance,
-                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
-                && groundHit.collider != null
-                && groundHit.collider.transform.root != transform.root;
-            if (foundGround)
+            if (CariLantai(up, setengahTinggi, 0.35f, out groundHit))
             {
                 grounded = true;
                 verticalVelocity = 0f;
-                surfaceUp = groundHit.normal.normalized;
-                up = surfaceUp;
-                float halfHeight = Mathf.Max(0.1f, transform.lossyScale.y * 0.5f);
-                transform.position = groundHit.point + up * halfHeight;
+                Vector3 pas = groundHit.point + up * setengahTinggi;
+                transform.position = Vector3.Lerp(transform.position, pas, 15f * Time.deltaTime); // turun tangga halus
             }
             else
             {
                 grounded = false;
                 verticalVelocity += gravityStrength * Time.deltaTime;
-                Vector3 fallStep = -up * verticalVelocity * Time.deltaTime;
-
-                // Fall collision: use raycasts so mesh colliders are detected.
-                RaycastHit fallHit = new RaycastHit();
-                bool fallBlocked = false;
-                float fallHitDist = fallStep.magnitude + 0.05f;
-                Vector3 fallDir = -up;
-                Vector3[] fallOrigins = { transform.position, transform.position + Vector3.right * 0.3f, transform.position - Vector3.right * 0.3f, transform.position + Vector3.forward * 0.3f, transform.position - Vector3.forward * 0.3f };
-                foreach (var origin in fallOrigins)
+                float jatuh = verticalVelocity * Time.deltaTime;
+                if (CariLantai(up, setengahTinggi, jatuh + 0.05f, out groundHit))
                 {
-                    RaycastHit h;
-                    if (Physics.Raycast(origin, fallDir, out h, fallStep.magnitude + 0.05f,
-                        Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
-                    {
-                        if (h.collider != null && h.collider.transform.root != transform.root && h.distance < fallHitDist)
-                        {
-                            fallHit = h;
-                            fallHitDist = h.distance;
-                            fallBlocked = true;
-                        }
-                    }
-                }
-                if (fallBlocked)
-                {
-                    surfaceUp = fallHit.normal.normalized;
-                    up = surfaceUp;
-                    float halfHeight = Mathf.Max(0.1f, transform.lossyScale.y * 0.5f);
-                    transform.position = fallHit.point + up * halfHeight;
+                    transform.position = groundHit.point + up * setengahTinggi;
                     verticalVelocity = 0f;
                     grounded = true;
-                    return;
                 }
-
-                transform.position += fallStep;
+                else transform.position -= up * jatuh;
             }
 
-            // Movement: walk slowly toward the player along the surface.
+            // ---- mau gerak ke mana
             Vector3 toPlayer = player.position - transform.position;
             float dist = toPlayer.magnitude;
-            Vector3 moveDir = Vector3.ProjectOnPlane(toPlayer, surfaceUp);
-            float moveDist = moveDir.magnitude;
-            if (moveDist > stopDistance && moveSpeed > 0f)
+            Vector3 datar = Vector3.ProjectOnPlane(toPlayer, up);
+            float jarakDatar = datar.magnitude;
+            Vector3 maju = jarakDatar > 0.1f ? datar / jarakDatar : Vector3.ProjectOnPlane(transform.forward, up).normalized;
+            Vector3 samping = Vector3.Cross(up, maju);
+
+            // ganti arah muter tiap beberapa detik biar nggak ketebak
+            if (Time.time > waktuGantiArah)
             {
-                moveDir.Normalize();
-                Vector3 moveStep = moveDir * moveSpeed * Time.deltaTime;
+                arahSamping = Random.value < 0.5f ? -1f : 1f;
+                waktuGantiArah = Time.time + Random.Range(1.5f, 3.5f);
+            }
 
-                // Collision avoidance: do not walk through walls/obstacles.
-                // Use several raycasts (center + sides) so non-convex mesh colliders
-                // (which SphereCast may skip) are still detected.
-                float allowedDist = moveStep.magnitude;
-                Vector3 right = Vector3.Cross(surfaceUp, moveDir).normalized;
-                Vector3[] origins = {
-                    transform.position,
-                    transform.position + right * 0.4f,
-                    transform.position - right * 0.4f
-                };
-                foreach (var origin in origins)
+            // kejauhan -> maju, kedeketan -> mundur, pas -> muter-muter (strafe)
+            float arahMaju = jarakDatar > jarakIdealMax ? 1f : jarakDatar < Mathf.Max(stopDistance, jarakIdealMin) ? -1f : 0f;
+            Vector3 mau = maju * arahMaju + samping * arahSamping * 0.6f;
+
+            // jauhin musuh lain biar nggak numpuk
+            foreach (Enemy lain in semuaMusuh)
+            {
+                if (lain == this || lain.dead) continue;
+                Vector3 jauh = Vector3.ProjectOnPlane(transform.position - lain.transform.position, up);
+                float d = jauh.magnitude;
+                if (d > 0.01f && d < 2.5f) mau += jauh / d * (2.5f - d) / 2.5f * 1.5f;
+            }
+            if (mau.sqrMagnitude > 1f) mau.Normalize();
+
+            // belum selesai muncul -> diem. lagi ngisi tembakan -> pelan
+            float laju = moveSpeed;
+            if (muncul < 1f) laju = 0f;
+            else if (ngisi != null) laju *= 0.3f;
+
+            // percepatan halus biar nggak patah-patah
+            kecepatan = Vector3.MoveTowards(kecepatan, mau * laju, 6f * Time.deltaTime);
+            Vector3 langkah = kecepatan * Time.deltaTime;
+            if (langkah.sqrMagnitude > 0.000001f)
+            {
+                float boleh = JarakBebas(langkah.normalized, langkah.magnitude, up);
+                if (boleh < langkah.magnitude)
                 {
-                    RaycastHit hit;
-                    if (Physics.Raycast(origin, moveDir, out hit, moveStep.magnitude + 0.5f,
-                        Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
-                    {
-                        if (hit.collider != null && hit.collider.transform.root != transform.root
-                            && Mathf.Abs(Vector3.Dot(hit.normal, surfaceUp)) < 0.5f)
-                        {
-                            float d = Mathf.Max(0f, hit.distance - 0.05f);
-                            if (d < allowedDist) allowedDist = d;
-                        }
-                    }
+                    // nabrak: belok arah muternya, kecepatannya dibuang
+                    arahSamping = -arahSamping;
+                    kecepatan = Vector3.zero;
+                    langkah = langkah.normalized * boleh;
                 }
-                if (allowedDist < moveStep.magnitude)
-                    moveStep = moveDir * allowedDist;
-
-                transform.position += moveStep;
+                transform.position += langkah;
             }
 
             if (facePlayer)
             {
-                Vector3 forward = Vector3.ProjectOnPlane(toPlayer, surfaceUp);
-                if (forward.sqrMagnitude < 0.001f) forward = Vector3.ProjectOnPlane(transform.forward, surfaceUp);
-                if (forward.sqrMagnitude > 0.001f)
-                {
-                    Quaternion targetRot = Quaternion.LookRotation(forward.normalized, surfaceUp);
-                    transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 5f);
-                }
+                Quaternion targetRot = Quaternion.LookRotation(maju, up);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 5f);
             }
 
             // Highlight if the player hasn't seen/shot this enemy for a while.
             UpdateHighlight();
 
+            if (muncul < 1f) return; // belum selesai muncul, jangan nembak dulu
+
+            // titik tengah badan pemain. pemainnya nggak ikut muter pas pindah gravitasi,
+            // jadi "atas"-nya diambil dari PlayerMotor, bukan Vector3.up
+            if (motorPemain == null) motorPemain = player.GetComponent<PlayerMotor>();
+            Vector3 atasPemain = motorPemain != null ? motorPemain.Up : Vector3.up;
+            Vector3 dadaPemain = player.position + atasPemain * 0.4f;
+            Vector3 moncong = muzzle != null ? muzzle.position : transform.position + up * 0.3f + transform.forward * 0.6f;
+            float jarakTembak = Vector3.Distance(moncong, dadaPemain);
+
             // VFX: tanda mau nembak, muncul sebentar sebelum peluru keluar
             if (vfxNgisi != null && ngisi == null && dist <= range && Time.time >= nextFireTime - waktuNgisi)
-            {
-                Vector3 asal = muzzle != null ? muzzle.position : transform.position + Vector3.up * 0.5f;
-                ngisi = Instantiate(vfxNgisi, asal, transform.rotation, transform);
-            }
+                ngisi = Instantiate(vfxNgisi, moncong, transform.rotation, transform);
 
             // Shooting.
             if (Time.time >= nextFireTime && dist <= range)
             {
-                Vector3 origin = muzzle != null ? muzzle.position : transform.position + Vector3.up * 0.5f;
-                Vector3 aimPoint = player.position + Vector3.up * 1.0f;
-                Vector3 dir = (aimPoint - origin).normalized;
-                if (dir.sqrMagnitude < 0.0001f) dir = transform.forward;
-
-                // Spread: tembakan tidak auto-kenna, musuh tidak aim sempurna.
-                if (aimSpread > 0f)
-                {
-                    Quaternion spreadRot = Quaternion.Euler(
-                        Random.Range(-aimSpread, aimSpread),
-                        Random.Range(-aimSpread, aimSpread),
-                        0f);
-                    dir = (spreadRot * dir).normalized;
-                }
-
-                // Line of sight check.
+                // cek ada yang ngehalangin nggak (garis lurus ke dada pemain)
+                Vector3 lurus = (dadaPemain - moncong).normalized;
                 bool blocked = false;
                 RaycastHit losHit;
-                if (Physics.Raycast(origin, dir, out losHit, range, hitMask, QueryTriggerInteraction.Ignore))
-                {
-                    if (losHit.distance < dist - 0.1f) blocked = true;
-                }
+                if (Physics.Raycast(moncong, lurus, out losHit, jarakTembak, hitMask, QueryTriggerInteraction.Ignore))
+                    if (losHit.collider.transform.root != transform.root && losHit.distance < jarakTembak - 0.3f) blocked = true;
 
                 if (!blocked)
                 {
-                    Fire(origin, dir);
+                    // meleset dikit (dalam meter, jadi jauh-deket sama adilnya)
+                    Vector3 titikBidik = dadaPemain + Random.insideUnitSphere * melesetMeter;
+                    Vector3 dir = (titikBidik - moncong).normalized;
+                    Fire(moncong, dir, atasPemain * 0.4f);
                     nextFireTime = Time.time + fireInterval;
                     ngisi = null; // VFX: biar tembakan berikutnya ada tandanya lagi
                 }
                 else
                 {
-                    // Try again shortly.
+                    // ketahan: geser ke samping dulu, coba lagi bentar
+                    arahSamping = -arahSamping;
                     nextFireTime = Time.time + 0.25f;
                 }
             }
         }
 
-        void Fire(Vector3 origin, Vector3 dir)
+        // cari lantai di bawah kaki (searah permukaan). permukaan miring/samping box nggak dihitung lantai
+        bool CariLantai(Vector3 up, float setengahTinggi, float lebih, out RaycastHit hasil)
+        {
+            Vector3 asal = transform.position + up * 0.2f;
+            RaycastHit[] kena = Physics.RaycastAll(asal, -up, setengahTinggi + 0.2f + lebih, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            hasil = new RaycastHit();
+            float terdekat = Mathf.Infinity;
+            foreach (RaycastHit h in kena)
+            {
+                if (h.collider.transform.root == transform.root) continue;
+                if (h.collider.GetComponentInParent<Enemy>() != null) continue;
+                if (Vector3.Dot(h.normal, up) < 0.7f) continue;
+                if (h.distance < terdekat) { terdekat = h.distance; hasil = h; }
+            }
+            return terdekat < Mathf.Infinity;
+        }
+
+        // seberapa jauh boleh jalan ke arah itu sebelum nabrak tembok / box
+        float JarakBebas(Vector3 arah, float jarak, Vector3 up)
+        {
+            float boleh = jarak;
+            Vector3 kanan = Vector3.Cross(up, arah).normalized;
+            Vector3[] asal = { transform.position, transform.position + kanan * 0.4f, transform.position - kanan * 0.4f };
+            foreach (Vector3 a in asal)
+            {
+                RaycastHit h;
+                if (Physics.Raycast(a, arah, out h, jarak + 0.55f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                    && h.collider.transform.root != transform.root
+                    && Mathf.Abs(Vector3.Dot(h.normal, up)) < 0.5f)
+                    boleh = Mathf.Min(boleh, Mathf.Max(0f, h.distance - 0.55f));
+            }
+            return boleh;
+        }
+
+        void Fire(Vector3 origin, Vector3 dir, Vector3 offsetDada)
         {
             if (sfx != null) sfx.PlayGunshot();
 
@@ -407,7 +425,7 @@ namespace VertigoShift.Gameplay.Enemies
             proj.vfxImpact = vfxImpact;
             proj.vfxHitPlayer = vfxPeluruKenaPemain;
 
-            proj.Launch(origin, dir, damage, player, transform, Vector3.up * 1.0f);
+            proj.Launch(origin, dir, damage, player, transform, offsetDada);
         }
 
         public void TakeDamage(float amount, Vector3 hitPoint)

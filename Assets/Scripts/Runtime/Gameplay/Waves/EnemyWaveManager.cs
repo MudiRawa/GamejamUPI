@@ -90,17 +90,20 @@ namespace VertigoShift.Gameplay.Waves
 
         void SpawnOne()
         {
-            Vector3 pos;
-            if (!TryGetSpawnPosition(out pos))
+            Vector3 pos, normal;
+            if (!TryGetSpawnPosition(out pos, out normal))
             {
                 Debug.LogWarning("[EnemyWaveManager] Could not find spawn position.");
                 return;
             }
 
-            GameObject go = Instantiate(enemyPrefab, pos, Quaternion.identity);
+            // musuh langsung tegak di permukaan tempat dia muncul
+            GameObject go = Instantiate(enemyPrefab, pos, Quaternion.FromToRotation(Vector3.up, normal));
             Enemy enemy = go.GetComponent<Enemy>();
             if (enemy != null)
             {
+                enemy.surfaceUp = normal;
+                enemy.autoDetectSurface = false;
                 enemy.respawn = false;
                 if (player != null) enemy.player = player;
                 enemy.onDeath += OnEnemyDeath;
@@ -114,9 +117,10 @@ namespace VertigoShift.Gameplay.Waves
             if (enemy != null) enemy.onDeath -= OnEnemyDeath;
         }
 
-        bool TryGetSpawnPosition(out Vector3 position)
+        bool TryGetSpawnPosition(out Vector3 position, out Vector3 normal)
         {
             position = Vector3.zero;
+            normal = Vector3.up;
             Vector3[] dirs = { Vector3.up, Vector3.down, Vector3.left, Vector3.right, Vector3.forward, Vector3.back };
 
             for (int attempt = 0; attempt < maxSpawnAttempts; attempt++)
@@ -133,12 +137,20 @@ namespace VertigoShift.Gameplay.Waves
                     if (hit.collider == null) continue;
                     if (hit.collider.transform.root == transform.root) continue;
 
+                    // cuma permukaan yang ngadep balik ke arah sinar (lantai/plafon/dinding, atau atas box),
+                    // bukan samping box / kaca miring
+                    if (Vector3.Dot(hit.normal, -dir) < 0.95f) continue;
+
                     Vector3 spawnPos = hit.point + hit.normal * 0.6f;
+
+                    // jangan muncul di dalem box / obstacle
+                    if (Physics.CheckSphere(spawnPos, 0.45f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
 
                     if (player != null && Vector3.Distance(spawnPos, player.position) < minSpawnDistanceFromPlayer)
                         continue;
 
                     position = spawnPos;
+                    normal = hit.normal;
                     return true;
                 }
             }

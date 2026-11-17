@@ -4,7 +4,7 @@ using UnityEngine.UI;
 namespace VertigoShift.UI
 {
     /// <summary>
-    /// Bar darah di kiri bawah + layar kalah ("KAMU TUMBANG").
+    /// Darah di kiri bawah (pakai Slider) + layar kalah ("KAMU TUMBANG").
     /// Menggantikan OnGUI di PlayerHealth.
     /// </summary>
     public class HealthDisplay : MonoBehaviour
@@ -19,7 +19,8 @@ namespace VertigoShift.UI
         public VertigoShift.Gameplay.Player.PlayerHealth health;
 
         RectTransform panelDarah;
-        Image barIsi;
+        Slider sliderDarah;   // bar darah, pakai Slider bawaan Unity (nggak bisa digeser pemain)
+        Image isiSlider;      // gambar isi slider, warnanya ganti pas kritis
         Text txtDarah;
 
         Image panelGelap;
@@ -68,7 +69,13 @@ namespace VertigoShift.UI
             panelDarah = UIBind.Rect(canvas.transform, "Panel_Darah");
             if (panelDarah == null) return false;
 
-            barIsi = UIBind.Gambar(panelDarah, "Bar_Isi");
+            sliderDarah = UIBind.Slider(panelDarah, "Slider_Darah");
+            if (sliderDarah == null)
+            {
+                // scene masih pakai bar darah lama -> ganti panelnya sama yang pakai slider
+                Destroy(panelDarah.gameObject);
+                BuatPanelDarah();
+            }
             txtDarah = UIBind.Teks(panelDarah, "Txt_Darah");
 
             panelGelap = UIBind.Gambar(canvasKalah.transform, "Panel_Gelap");
@@ -76,19 +83,55 @@ namespace VertigoShift.UI
             txtWave = UIBind.Teks(canvasKalah.transform, "Txt_Wave");
             txtHint = UIBind.Teks(canvasKalah.transform, "Txt_Hint");
 
-            SiapkanBar();
+            SiapkanSlider();
             return panelGelap != null && txtKalah != null;
         }
 
-        void SiapkanBar()
+        // slider cuma buat nampilin: nggak bisa diklik, tanpa pegangan
+        void SiapkanSlider()
         {
-            if (barIsi != null)
+            if (sliderDarah == null) return;
+            sliderDarah.interactable = false;
+            sliderDarah.transition = Selectable.Transition.None;
+            if (sliderDarah.handleRect != null)
             {
-                barIsi.type = Image.Type.Filled;
-                barIsi.fillMethod = Image.FillMethod.Horizontal;
-                barIsi.fillOrigin = (int)Image.OriginHorizontal.Left;
-                barIsi.fillAmount = 1f;
+                sliderDarah.handleRect.gameObject.SetActive(false);
+                sliderDarah.handleRect = null;
             }
+            Image latar = sliderDarah.targetGraphic as Image;
+            if (latar != null) latar.raycastTarget = false;
+            if (sliderDarah.fillRect != null) isiSlider = sliderDarah.fillRect.GetComponent<Image>();
+        }
+
+        // panel darah kiri bawah: tulisan DARAH + angka di atas, slider di bawah
+        void BuatPanelDarah()
+        {
+            Color putih = theme != null ? theme.teksPutih : new Color(0.94f, 0.93f, 0.89f);
+            Color cyan = theme != null ? theme.cyan : new Color(0.16f, 0.94f, 1f);
+
+            panelDarah = UIFactory.BuatPanel(canvas.transform, "Panel_Darah",
+                new Vector2(0f, 0f), new Vector2(0f, 0f),
+                new Vector2(28f, 28f), new Vector2(348f, 100f),
+                theme != null ? theme.panelLatar : new Color(0f, 0f, 0f, 0.55f));
+
+            UIFactory.BuatText(panelDarah, "Txt_Label", "DARAH",
+                theme != null ? theme.fontTulisan : null, theme != null ? theme.ukuranKecil : 14,
+                cyan, TextAnchor.MiddleLeft,
+                new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(12f, -32f), new Vector2(140f, -6f));
+
+            txtDarah = UIFactory.BuatText(panelDarah, "Txt_Darah", "100",
+                theme != null ? theme.fontAngka : null, theme != null ? theme.ukuranAngkaSedang : 40,
+                putih, TextAnchor.MiddleRight,
+                new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-170f, -48f), new Vector2(-12f, -2f));
+
+            sliderDarah = UIFactory.BuatSlider(panelDarah, "Slider_Darah", 100f, 0f, 100f,
+                new Color(1f, 1f, 1f, 0.12f), putih, Color.clear,
+                new Vector2(0f, 0f), new Vector2(1f, 0f),
+                new Vector2(12f, 12f), new Vector2(-12f, 26f));
+
+            SiapkanSlider();
         }
 
         void BuatUI()
@@ -96,23 +139,8 @@ namespace VertigoShift.UI
             Color putih = theme != null ? theme.teksPutih : new Color(0.94f, 0.93f, 0.89f);
             Color merah = theme != null ? theme.merah : new Color(0.92f, 0.2f, 0.2f);
 
-            // --- Bar darah (kiri bawah) ---
-            panelDarah = UIFactory.BuatPanel(canvas.transform, "Panel_Darah",
-                new Vector2(0f, 0f), new Vector2(0f, 0f),
-                new Vector2(28f, 28f), new Vector2(292f, 42f),
-                new Color(0.06f, 0.06f, 0.07f, 0.85f));
-
-            barIsi = UIFactory.BuatImage(panelDarah, "Bar_Isi", null, putih,
-                new Vector2(0f, 0f), new Vector2(1f, 1f),
-                new Vector2(2f, 2f), new Vector2(-2f, -2f));
-
-            txtDarah = UIFactory.BuatText(panelDarah, "Txt_Darah", "100",
-                theme != null ? theme.fontAngka : null, theme != null ? theme.ukuranTulisan : 22,
-                putih, TextAnchor.MiddleLeft,
-                new Vector2(0f, 0f), new Vector2(0f, 0f),
-                new Vector2(0f, 16f), new Vector2(200f, 44f));
-
-            SiapkanBar();
+            // --- Darah (kiri bawah) ---
+            BuatPanelDarah();
 
             // --- Layar kalah ---
             panelGelap = UIFactory.BuatImage(canvasKalah.transform, "Panel_Gelap", null, new Color(0f, 0f, 0f, 0f),
@@ -168,11 +196,12 @@ namespace VertigoShift.UI
                     : (theme != null ? theme.teksPutih : new Color(0.94f, 0.93f, 0.89f));
                 if (kritis) warna.a = 0.5f + Mathf.PingPong(Time.unscaledTime * 3f, 0.5f);
 
-                if (barIsi != null)
+                if (sliderDarah != null)
                 {
-                    barIsi.fillAmount = isi;
-                    barIsi.color = warna;
+                    sliderDarah.maxValue = health.darahMaks;
+                    sliderDarah.value = darahTampil;
                 }
+                if (isiSlider != null) isiSlider.color = warna;
                 if (txtDarah != null)
                 {
                     txtDarah.text = Mathf.CeilToInt(health.darah).ToString();

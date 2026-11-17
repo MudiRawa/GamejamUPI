@@ -17,7 +17,7 @@ public static class VFXBuilder
     [MenuItem("Tools/VFX/Pasang VFX ke Scene")]
     static void Pasang()
     {
-        foreach (Revolver revolver in Object.FindObjectsByType<Revolver>(FindObjectsSortMode.None))
+        foreach (Revolver revolver in Object.FindObjectsByType<Revolver>())
         {
             revolver.vfxTembakanRevolver = Ambil("VFX_TembakanRevolver");
             revolver.vfxPeluruTrail = Ambil("VFX_PeluruTrail");
@@ -26,30 +26,31 @@ public static class VFXBuilder
             EditorUtility.SetDirty(revolver);
         }
 
-        foreach (PlayerMotor motor in Object.FindObjectsByType<PlayerMotor>(FindObjectsSortMode.None))
+        foreach (PlayerMotor motor in Object.FindObjectsByType<PlayerMotor>())
         {
             motor.vfxAngin = Ambil("VFX_Angin");
             motor.vfxSlide = Ambil("VFX_Slide");
             EditorUtility.SetDirty(motor);
         }
 
-        foreach (TargetDummy musuh in Object.FindObjectsByType<TargetDummy>(FindObjectsSortMode.None))
+        foreach (TargetDummy musuh in Object.FindObjectsByType<TargetDummy>())
         {
             musuh.vfxMusuhPecah = Ambil("VFX_MusuhPecah");
             EditorUtility.SetDirty(musuh);
         }
 
         // Enemy: isi slot VFX tembakan (template) biar efek musuh mudah diganti
-        foreach (Enemy musuh in Object.FindObjectsByType<Enemy>(FindObjectsSortMode.None))
+        foreach (Enemy musuh in Object.FindObjectsByType<Enemy>())
         {
             musuh.vfxTembakan = Ambil("VFX_TembakanRevolver");
-            musuh.vfxPeluruTrail = Ambil("VFX_PeluruTrail");
+            // peluru musuh: pakai VFX_PeluruMusuh kalau udah dibikin (Tools > VFX > Buat VFX Peluru Musuh)
+            musuh.vfxPeluruTrail = AmbilKalauAda("VFX_PeluruMusuh") ?? Ambil("VFX_PeluruTrail");
             musuh.vfxImpact = Ambil("VFX_ImpactPeluru");
-            musuh.vfxPeluruKenaPemain = Ambil("VFX_PeluruKenaMusuh");
+            musuh.vfxPeluruKenaPemain = AmbilKalauAda("VFX_PeluruKenaPemain") ?? Ambil("VFX_PeluruKenaMusuh");
             EditorUtility.SetDirty(musuh);
         }
 
-        foreach (PrototypeHUD hud in Object.FindObjectsByType<PrototypeHUD>(FindObjectsSortMode.None))
+        foreach (PrototypeHUD hud in Object.FindObjectsByType<PrototypeHUD>())
         {
             hud.gambarTabung = AmbilGambar("UI_Tabung");
             hud.gambarPeluru = AmbilGambar("UI_Peluru");
@@ -62,7 +63,7 @@ public static class VFXBuilder
         Font angka = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Tektur-900.ttf");
         Font tulisan = AssetDatabase.LoadAssetAtPath<Font>("Assets/UI/Font/Tektur-700.ttf");
 
-        foreach (WaveHUD wave in Object.FindObjectsByType<WaveHUD>(FindObjectsSortMode.None))
+        foreach (WaveHUD wave in Object.FindObjectsByType<WaveHUD>())
         {
             wave.fontAngka = angka;
             wave.fontTulisan = tulisan;
@@ -70,7 +71,7 @@ public static class VFXBuilder
         }
 
         // darah pemain: pasang PlayerHealth ke Player kalau belum ada
-        foreach (PlayerMotor motor in Object.FindObjectsByType<PlayerMotor>(FindObjectsSortMode.None))
+        foreach (PlayerMotor motor in Object.FindObjectsByType<PlayerMotor>())
         {
             PlayerHealth darah = motor.GetComponent<PlayerHealth>();
             if (darah == null) darah = motor.gameObject.AddComponent<PlayerHealth>();
@@ -88,6 +89,12 @@ public static class VFXBuilder
         Texture2D gambar = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/UI/Revolver/" + nama + ".png");
         if (gambar == null) Debug.LogWarning(nama + " nggak ketemu di Assets/UI/Revolver/");
         return gambar;
+    }
+
+    static GameObject AmbilKalauAda(string nama)
+    {
+        GameObject vfx = AssetDatabase.LoadAssetAtPath<GameObject>(Folder + nama + ".prefab");
+        return vfx != null ? vfx : null; // biar ?? jalan bener sama objek Unity
     }
 
     static GameObject Ambil(string nama)
