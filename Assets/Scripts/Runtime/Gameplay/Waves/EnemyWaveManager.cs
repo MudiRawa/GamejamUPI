@@ -143,8 +143,17 @@ namespace VertigoShift.Gameplay.Waves
 
                     Vector3 spawnPos = hit.point + hit.normal * 0.6f;
 
-                    // jangan muncul di dalem box / obstacle
-                    if (Physics.CheckSphere(spawnPos, 0.45f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
+                    // jangan muncul di dalem / ketiban box & obstacle:
+                    // 1. badan robot (setinggi ~1.8 m) nggak boleh nyenggol apa-apa
+                    Vector3 n = hit.normal;
+                    if (Physics.CheckCapsule(hit.point + n * 0.7f, hit.point + n * 1.6f, 0.6f,
+                        Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
+                    // 2. diliat dari atas (3 m), yang pertama kena harus lantai itu sendiri.
+                    //    kalau kena tutup box duluan berarti titiknya ada di dalem box
+                    //    (box yang digabung pakai MeshCollider, jadi cek no.1 nggak selalu ketahuan)
+                    RaycastHit atas;
+                    if (Physics.Raycast(hit.point + n * 3f, -n, out atas, 3.2f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                        && atas.distance < 2.9f) continue;
 
                     if (player != null && Vector3.Distance(spawnPos, player.position) < minSpawnDistanceFromPlayer)
                         continue;

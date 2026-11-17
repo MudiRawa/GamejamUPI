@@ -29,6 +29,11 @@ namespace VertigoShift.Gameplay.Enemies
         public GameObject vfxNgisi;      // VFX: tanda musuh mau nembak
         public float waktuNgisi = 0.5f;  // VFX: tandanya muncul berapa detik sebelum nembak
 
+        [Header("Model 3D (diisi lewat Tools > Musuh > Pasang Robot)")]
+        public Transform model;          // model robot. kalau diisi, kubusnya disembunyiin
+        public Animator animator;        // state "Diam" & "Jalan"
+        public Material bahanKedip;      // material putih pas ketembak
+
         [Header("Movement")]
         [Tooltip("How fast the enemy walks toward the player (m/s).")]
         public float moveSpeed = 1.5f;
@@ -116,9 +121,18 @@ namespace VertigoShift.Gameplay.Enemies
         float muncul, pukul;
         GameObject ngisi;
 
+        // model robot
+        Renderer[] rendModel;
+        Material[][] bahanAsli;
+        Material bahanHighlight;  // material kotak Highlight, dipakai ke robot pas lama nggak keliatan
+        int bahanSekarang;        // 0 = asli, 1 = putih (ketembak), 2 = highlight
+        bool animJalan;
+
         // gerak: kecepatan sekarang, arah muter, dan daftar semua musuh (biar nggak numpuk)
         Vector3 kecepatan;
-        float arahSamping = 1f, waktuGantiArah;
+        Vector3 tujuan;          // titik yang lagi dituju
+        bool lagiPindah;         // true = jalan ke tujuan, false = berdiri nembak
+        float waktuGanti;        // kapan ganti dari berdiri ke pindah (atau sebaliknya)
         PlayerMotor motorPemain;
         static readonly System.Collections.Generic.List<Enemy> semuaMusuh = new System.Collections.Generic.List<Enemy>();
 
@@ -162,6 +176,17 @@ namespace VertigoShift.Gameplay.Enemies
             }
 
             highlight = transform.Find("Highlight");
+
+            // pakai model robot: kubusnya diumpetin, material asli robot disimpen buat kedip
+            if (model != null)
+            {
+                if (rend != null) rend.enabled = false;
+                rendModel = model.GetComponentsInChildren<Renderer>();
+                bahanAsli = new Material[rendModel.Length][];
+                for (int i = 0; i < rendModel.Length; i++) bahanAsli[i] = rendModel[i].sharedMaterials;
+                Renderer kotakHighlight = highlight != null ? highlight.GetComponent<Renderer>() : null;
+                if (kotakHighlight != null) bahanHighlight = kotakHighlight.sharedMaterial;
+            }
             if (highlight != null) highlight.gameObject.SetActive(false);
 
             if (player == null)
@@ -222,6 +247,22 @@ namespace VertigoShift.Gameplay.Enemies
                     instanceMaterial.SetColor("_EmissionColor", highlighted ? highlightColor * 2f : Color.black);
             }
 
+            // robot: material asli / putih sebentar pas ketembak / highlight pas lama nggak keliatan
+            // (bukan kotak lagi, jadi bentuknya tetep robot)
+            int bahanMau = flashTimer > 0f && bahanKedip != null ? 1 : (highlighted && bahanHighlight != null ? 2 : 0);
+            if (rendModel != null && bahanMau != bahanSekarang)
+            {
+                bahanSekarang = bahanMau;
+                Material ganti = bahanMau == 1 ? bahanKedip : bahanHighlight;
+                for (int i = 0; i < rendModel.Length; i++)
+                {
+                    if (bahanMau == 0) { rendModel[i].sharedMaterials = bahanAsli[i]; continue; }
+                    Material[] semua = new Material[bahanAsli[i].Length];
+                    for (int j = 0; j < semua.Length; j++) semua[j] = ganti;
+                    rendModel[i].sharedMaterials = semua;
+                }
+            }
+
             if (dead) return;
             if (player == null) return;
 
@@ -257,18 +298,26 @@ namespace VertigoShift.Gameplay.Enemies
             Vector3 datar = Vector3.ProjectOnPlane(toPlayer, up);
             float jarakDatar = datar.magnitude;
             Vector3 maju = jarakDatar > 0.1f ? datar / jarakDatar : Vector3.ProjectOnPlane(transform.forward, up).normalized;
-            Vector3 samping = Vector3.Cross(up, maju);
 
-            // ganti arah muter tiap beberapa detik biar nggak ketebak
-            if (Time.time > waktuGantiArah)
+            // pola gerak: berdiri nembak sebentar -> pindah ke titik lain di sekitar pemain -> berdiri lagi
+            if (Time.time > waktuGanti)
             {
-                arahSamping = Random.value < 0.5f ? -1f : 1f;
-                waktuGantiArah = Time.time + Random.Range(1.5f, 3.5f);
+                if (lagiPindah) Berhenti();
+                else PilihTujuan(up);
             }
 
-            // kejauhan -> maju, kedeketan -> mundur, pas -> muter-muter (strafe)
-            float arahMaju = jarakDatar > jarakIdealMax ? 1f : jarakDatar < Mathf.Max(stopDistance, jarakIdealMin) ? -1f : 0f;
-            Vector3 mau = maju * arahMaju + samping * arahSamping * 0.6f;
+            Vector3 mau = Vector3.zero;
+            if (jarakDatar < jarakIdealMin * 0.6f)
+            {
+                mau = -maju;                 // kedeketan: mundur dulu
+                lagiPindah = false;
+            }
+            else if (lagiPindah)
+            {
+                Vector3 keTujuan = Vector3.ProjectOnPlane(tujuan - transform.position, up);
+                if (keTujuan.magnitude < 0.5f) Berhenti(); // udah nyampe
+                else mau = keTujuan.normalized;
+            }
 
             // jauhin musuh lain biar nggak numpuk
             foreach (Enemy lain in semuaMusuh)
@@ -293,19 +342,38 @@ namespace VertigoShift.Gameplay.Enemies
                 float boleh = JarakBebas(langkah.normalized, langkah.magnitude, up);
                 if (boleh < langkah.magnitude)
                 {
-                    // nabrak: belok arah muternya, kecepatannya dibuang
-                    arahSamping = -arahSamping;
+                    // nabrak: berhenti dulu, nanti cari tujuan lain
+                    Berhenti();
                     kecepatan = Vector3.zero;
                     langkah = langkah.normalized * boleh;
                 }
                 transform.position += langkah;
             }
 
+            // animasi robot: diem atau jalan (jalan sekalian dipakai pas lagi ngisi tembakan)
+            if (animator != null)
+            {
+                bool jalan = kecepatan.magnitude > 0.15f || ngisi != null;
+                if (jalan != animJalan)
+                {
+                    animJalan = jalan;
+                    animator.CrossFade(jalan ? "Jalan" : "Diam", 0.2f);
+                }
+            }
+
             if (facePlayer)
             {
-                Quaternion targetRot = Quaternion.LookRotation(maju, up);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 5f);
+                // pas jalan ngadep ke arah jalan, pas berdiri ngadep pemain
+                Vector3 hadap = maju;
+                Vector3 arahJalan = Vector3.ProjectOnPlane(kecepatan, up);
+                if (lagiPindah && arahJalan.magnitude > 0.3f) hadap = arahJalan.normalized;
+                // selalu tegak lurus permukaan (nggak nunduk / dongak), muternya lebih cepet pas berdiri
+                Quaternion targetRot = Quaternion.LookRotation(hadap, up);
+                float cepatMuter = lagiPindah ? 6f : 10f;
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * cepatMuter);
             }
+            // udah ngadep pemain belum? (cuma diitung arah kiri-kanannya)
+            bool udahNgadep = !facePlayer || Vector3.Angle(Vector3.ProjectOnPlane(transform.forward, up), maju) < 15f;
 
             // Highlight if the player hasn't seen/shot this enemy for a while.
             UpdateHighlight();
@@ -321,6 +389,7 @@ namespace VertigoShift.Gameplay.Enemies
             float jarakTembak = Vector3.Distance(moncong, dadaPemain);
 
             // VFX: tanda mau nembak, muncul sebentar sebelum peluru keluar
+            if (lagiPindah || !udahNgadep) return; // nembaknya cuma pas berdiri & udah ngadep pemain
             if (vfxNgisi != null && ngisi == null && dist <= range && Time.time >= nextFireTime - waktuNgisi)
                 ngisi = Instantiate(vfxNgisi, moncong, transform.rotation, transform);
 
@@ -345,11 +414,32 @@ namespace VertigoShift.Gameplay.Enemies
                 }
                 else
                 {
-                    // ketahan: geser ke samping dulu, coba lagi bentar
-                    arahSamping = -arahSamping;
+                    // ketahan: pindah tempat dulu
+                    PilihTujuan(up);
                     nextFireTime = Time.time + 0.25f;
                 }
             }
+        }
+
+        // berdiri di tempat 1.5-3 detik (sambil nembak)
+        void Berhenti()
+        {
+            lagiPindah = false;
+            waktuGanti = Time.time + Random.Range(1.5f, 3f);
+        }
+
+        // pilih titik baru di sekitar pemain, jaraknya antara jarakIdealMin-Max,
+        // geser dikit dari posisi sekarang biar nggak lari ngelilingin pemain
+        void PilihTujuan(Vector3 up)
+        {
+            Vector3 dariPemain = Vector3.ProjectOnPlane(transform.position - player.position, up);
+            if (dariPemain.sqrMagnitude < 0.01f) dariPemain = Vector3.ProjectOnPlane(-transform.forward, up);
+            Vector3 arah = Quaternion.AngleAxis(Random.Range(-60f, 60f), up) * dariPemain.normalized;
+            float jarak = Random.Range(jarakIdealMin, jarakIdealMax);
+            Vector3 titik = player.position + arah * jarak;
+            tujuan = transform.position + Vector3.ProjectOnPlane(titik - transform.position, up);
+            lagiPindah = true;
+            waktuGanti = Time.time + 4f; // kelamaan nggak nyampe -> berhenti aja
         }
 
         // cari lantai di bawah kaki (searah permukaan). permukaan miring/samping box nggak dihitung lantai
@@ -440,10 +530,19 @@ namespace VertigoShift.Gameplay.Enemies
             if (health <= 0f) Die();
         }
 
+        // nyalain / matiin badan: robot kalau ada, kalau nggak ya kubusnya
+        void TampilkanBadan(bool tampil)
+        {
+            if (rendModel != null)
+                foreach (Renderer r in rendModel) r.enabled = tampil;
+            else if (rend != null) rend.enabled = tampil;
+        }
+
         void SetHighlighted(bool on)
         {
             highlighted = on;
-            if (highlight != null) highlight.gameObject.SetActive(on);
+            // kalau pakai robot, kotak highlight nggak dimunculin (robotnya yang ganti warna)
+            if (highlight != null) highlight.gameObject.SetActive(on && rendModel == null);
 
             // Keep base material change as fallback (visible when not occluded).
             if (instanceMaterial == null || !instanceMaterial.HasProperty("_BaseColor")) return;
@@ -502,7 +601,7 @@ namespace VertigoShift.Gameplay.Enemies
             bool closeRange = distance <= closeRangeDistance;
             if (dizziness != null) dizziness.OnKill(closeRange);
 
-            if (rend != null) rend.enabled = false;
+            TampilkanBadan(false);
             if (col != null) col.enabled = false;
 
             StartCoroutine(respawn ? RespawnRoutine() : DestroyRoutine());
@@ -519,7 +618,7 @@ namespace VertigoShift.Gameplay.Enemies
             highlighted = false;
             lastSeenTime = Time.time;
             if (highlight != null) highlight.gameObject.SetActive(false);
-            if (rend != null) rend.enabled = true;
+            TampilkanBadan(true);
             if (col != null) col.enabled = true;
             nextFireTime = Time.time + Random.Range(0.5f, fireInterval);
             if (instanceMaterial != null && instanceMaterial.HasProperty("_BaseColor"))
