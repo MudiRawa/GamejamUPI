@@ -25,8 +25,12 @@ namespace VertigoShift.Audio
             Configure(gunSource, 1f, 0.95f);
             Configure(uiSource, 1f, 0.8f);
 
-            gunshot = SynthesiseGunshot();
-            reload = SynthesiseClick("Reload", 0.22f, 1800f, 2);
+            // pakai suara revolver dari Resources/Audio kalau ada, kalau nggak ada balik ke suara sintesis
+            AudioClip revolver = Resources.Load<AudioClip>("Audio/SFX_Revolver");
+            gunshot = revolver != null ? revolver : SynthesiseGunshot();
+            // sama: suara reload dari Resources/Audio kalau ada
+            AudioClip reloadLuar = Resources.Load<AudioClip>("Audio/SFX_Reload");
+            reload = reloadLuar != null ? reloadLuar : SynthesiseClick("Reload", 0.22f, 1800f, 2);
             dryFire = SynthesiseClick("DryFire", 0.09f, 2600f, 1);
             whoosh = SynthesiseWhoosh();
         }

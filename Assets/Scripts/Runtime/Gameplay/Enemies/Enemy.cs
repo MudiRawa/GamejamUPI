@@ -216,6 +216,7 @@ namespace VertigoShift.Gameplay.Enemies
             muncul = 0f;
             transform.localScale = Vector3.zero;
             if (vfxMuncul != null) Instantiate(vfxMuncul, transform.position, Quaternion.LookRotation(surfaceUp));
+            AudioManager.PutarDi("MusuhMuncul", transform.position, 0.6f); // suara: teleport muncul
         }
 
         void Update()
@@ -391,7 +392,10 @@ namespace VertigoShift.Gameplay.Enemies
             // VFX: tanda mau nembak, muncul sebentar sebelum peluru keluar
             if (lagiPindah || !udahNgadep) return; // nembaknya cuma pas berdiri & udah ngadep pemain
             if (vfxNgisi != null && ngisi == null && dist <= range && Time.time >= nextFireTime - waktuNgisi)
+            {
                 ngisi = Instantiate(vfxNgisi, moncong, transform.rotation, transform);
+                AudioManager.PutarDi("MusuhNgisi", moncong, 0.7f); // suara: ngecas mau nembak
+            }
 
             // Shooting.
             if (Time.time >= nextFireTime && dist <= range)
@@ -478,7 +482,7 @@ namespace VertigoShift.Gameplay.Enemies
 
         void Fire(Vector3 origin, Vector3 dir, Vector3 offsetDada)
         {
-            if (sfx != null) sfx.PlayGunshot();
+            AudioManager.PutarDi("TembakMusuh", origin); // suara: tembakan laser robot
 
             // VFX: muzzle flash + efek tembakan di moncong
             PlayFlash();
@@ -526,6 +530,10 @@ namespace VertigoShift.Gameplay.Enemies
             pukul = 1f; // VFX: mental dikit
             lastSeenTime = Time.time;
             if (highlighted) SetHighlighted(false);
+
+            // suara: dentang logam di tempat kena + "tik" hitmarker di telinga pemain
+            AudioManager.PutarDi("KenaMusuh", hitPoint, 0.8f);
+            AudioManager.Putar("Hitmarker", 0.6f, 0.02f);
 
             if (health <= 0f) Die();
         }
@@ -584,6 +592,7 @@ namespace VertigoShift.Gameplay.Enemies
         {
             dead = true;
             if (onDeath != null) onDeath(this);
+            AudioManager.PutarDi("MusuhMeledak", transform.position); // suara: robot meledak
 
             if (vfxMusuhPecah != null)
             {
@@ -615,6 +624,7 @@ namespace VertigoShift.Gameplay.Enemies
             dead = false;
             muncul = 0f; // VFX: muncul lagi dari kecil
             if (vfxMuncul != null) Instantiate(vfxMuncul, transform.position, Quaternion.LookRotation(surfaceUp));
+            AudioManager.PutarDi("MusuhMuncul", transform.position, 0.6f); // suara: teleport muncul
             highlighted = false;
             lastSeenTime = Time.time;
             if (highlight != null) highlight.gameObject.SetActive(false);
