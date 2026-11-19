@@ -38,6 +38,34 @@ namespace VertigoShift.Gameplay.Weapons
             if (revolver == null) revolver = GetComponentInParent<Revolver>();
             if (motor == null) motor = GetComponentInParent<PlayerMotor>();
             if (revolver != null) tembakTadi = revolver.ShotsFired;
+
+            // benerin sumbu putar tabung: harus sejajar laras (Cube.003), bukan garis tengah tabung -> laras
+            // yang miring ~10 derajat (bikin tabungnya oleng pas muter)
+            Transform laras = CariAnak(transform, "Cube.003");
+            if (laras != null)
+            {
+                Vector3 sumbu = SumbuPanjang(laras, transform);
+                sumbuTabung = Vector3.Dot(sumbu, sumbuTabung) < 0f ? -sumbu : sumbu;
+            }
+        }
+
+        // arah sisi terpanjang sebuah bagian model (mis. laras), dalam koordinat lokal 'ruang'.
+        // pakai bounds mesh, jadi nggak perlu Read/Write di setting FBX
+        public static Vector3 SumbuPanjang(Transform bagian, Transform ruang)
+        {
+            MeshFilter mf = bagian != null ? bagian.GetComponentInChildren<MeshFilter>() : null;
+            if (mf == null || mf.sharedMesh == null) return Vector3.forward;
+            Vector3 s = Vector3.Scale(mf.sharedMesh.bounds.size, mf.transform.lossyScale);
+            s = new Vector3(Mathf.Abs(s.x), Mathf.Abs(s.y), Mathf.Abs(s.z));
+            Vector3 lokal = s.x >= s.y && s.x >= s.z ? Vector3.right : (s.y >= s.z ? Vector3.up : Vector3.forward);
+            return ruang.InverseTransformDirection(mf.transform.TransformDirection(lokal)).normalized;
+        }
+
+        static Transform CariAnak(Transform induk, string nama)
+        {
+            foreach (Transform t in induk.GetComponentsInChildren<Transform>(true))
+                if (t.name == nama) return t;
+            return null;
         }
 
         void LateUpdate()

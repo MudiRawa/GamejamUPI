@@ -7,7 +7,7 @@ using UnityEngine;
 // Tools > Arena > Susun Arena      : nyusun model dari 3D artist ke arena (acak tapi rapi, ikut grid 2 m)
 // Tools > Arena > Acak Ulang       : susunan acak yang baru
 // Tools > Arena > Hapus Susunan    : balikin arena kayak semula
-// (box udah dikurangin, plus pipa hiasan di dinding depan & belakang: tanpa collider)
+// (box udah dikurangin, plus pipa hiasan acak di 4 dinding: tanpa collider)
 //
 // Model FBX taruh di Assets/Models/Arena, tekstur di Assets/Models/Arena/Textures.
 // Jalankan di scene InGame (yang ada Arena, Targets, sama Player dari lead).
@@ -41,11 +41,24 @@ public static class ArenaBuilder
     const float UkuranPetiMin = 1.5f, UkuranPetiMax = 2.3f; // ukuran box (aslinya 1 m)
     static readonly bool PakaiLantaiL = true; // 4 Floor L ngelilingin tengah tiap permukaan
     const int BingkaiWall2 = 0;          // berapa baris paling pinggir pakai Wall 2 (jadi bingkai), tengahnya Wall. 0 = Wall semua
+    // variasi panel dinding depan & belakang (0 / false = polos kayak semula)
+    const int PanelGede2x2 = 0;          // panel 2x2 sel (4x4 m) per dinding
+    const int PanelGede3x3 = 0;          // panel 3x3 sel (6x6 m) per dinding
+    const int TambalanWall2 = 0;         // kelompok panel Wall 2 (kotak acak 2-4 sel) per dinding
+    const int GarisWall2 = 0;            // baris mendatar penuh pakai Wall 2 per dinding
+    static readonly bool PutarPanelAcak = false; // panel diputer 180 derajat acak
     const float PanjangPondasi = 4f;     // panjang 1 potong pondasi (aslinya 2 m, dipanjangin biar ringan)
-    // pipa di dinding depan & belakang (ukuran dalam meter, 0 = tengah dinding / lantai)
-    const float PipaPinggir = 14f;       // pipa tegak kiri & kanan, jaraknya dari tengah dinding
-    const float PipaBawah = 10f;         // tinggi pipa mendatar bawah
-    const float PipaAtas = 34f;          // tinggi pipa mendatar atas
+    // pipa hiasan: posisinya acak (ikut acakan arena), dipasang di 4 dinding
+    static readonly bool PipaDiBelakang = true;  // dinding belakang (z besar)
+    static readonly bool PipaDiDepan = true;     // dinding depan (z kecil)
+    static readonly bool PipaDiKiri = true;      // dinding kiri (x kecil, bisa diinjek)
+    static readonly bool PipaDiKanan = true;     // dinding kanan (x besar, bisa diinjek)
+    const float PipaPalingKiri = -14f;   // batas kiri tempat pipa mulai, diliat dari depan dindingnya (0 = tengah, + = kanan)
+    const float PipaPalingKanan = 14f;   // batas kanan tempat pipa mulai (maks 14)
+    const int JumlahJalurPipa = 6;       // jumlah jalur pipa di dinding depan & belakang (tiap jalur belok-belok sendiri)
+    const int JumlahJalurPipaSamping = 4; // jumlah jalur pipa di dinding kiri & kanan (lebih dikit, soalnya bisa diinjek)
+    const float PeluangCabang = 0.4f;    // peluang pipa lurus yang panjang dikasih cabang (Pipe X)
+    const float PeluangTembusLantai = 0.4f; // peluang ujung pipa tegak nerus masuk pondasi (sisanya belok masuk tembok)
     // =================================================
 
     const string FolderModel = "Assets/Models/Arena";
@@ -137,6 +150,7 @@ public static class ArenaBuilder
         Hapus();
         Transform induk = new GameObject(NamaInduk).transform;
         Undo.RegisterCreatedObjectUndo(induk.gameObject, "Susun Arena");
+        if (PakaiPipa) AcakJaringanPipa(seed);
 
         foreach (Permukaan p in semuaPermukaan)
         {
@@ -162,12 +176,11 @@ public static class ArenaBuilder
         }
         if (PakaiPipa)
         {
-            Transform pipaDepan = SusunPipaDinding(induk, -1f, "PipaDepan");
-            Transform pipaBelakang = SusunPipaDinding(induk, 1f, "PipaBelakang");
-            if (GabungMesh)
+            foreach (int d in SisiPipa())
             {
-                Gabungkan(pipaDepan, "PipaDepan");
-                Gabungkan(pipaBelakang, "PipaBelakang");
+                string nama = "Pipa" + DindingPipa[d].nama;
+                Transform pipa = SusunPipaDinding(induk, d, nama);
+                if (GabungMesh) Gabungkan(pipa, nama);
             }
         }
         if (PakaiDinding)
@@ -664,67 +677,254 @@ public static class ArenaBuilder
         return kosong;
     }
 
-    // ---------------------------------------------------------------- PIPA HIASAN (DINDING DEPAN & BELAKANG)
+    // ---------------------------------------------------------------- PIPA HIASAN (4 DINDING)
     // cuma tempelan: NGGAK ada collider, jadi nggak ganggu jalan / peluru.
-    // bentuknya kayak jaringan pipa beneran (simetris):
-    //   - 2 pipa tegak di kiri & kanan, keluar dari pondasi bawah
-    //   - pipa mendatar bawah nyambungin keduanya (pakai Pipe X), ujung luarnya belok masuk tembok
-    //   - di atas belok ke tengah (Pipe L), ketemu di Pipe X tengah:
-    //     ke atas masuk pondasi plafon, ke bawah sebentar terus belok masuk tembok
-    // posisi di dinding: a = kiri-kanan (0 = tengah), b = tinggi dari lantai
+    // tiap dinding diisi beberapa jalur pipa yang bentuknya acak semua (diacak lagi tiap "Acak Ulang"):
+    //   - mulainya bisa dari pondasi bawah, dari pondasi plafon, atau keluar dari tembok
+    //   - jalan lurus dengan panjang acak, terus belok kiri/kanan (Pipe L), 1-3 kali
+    //   - ujungnya belok masuk tembok, atau nerus masuk pondasi
+    //   - pipa lurus yang panjang kadang dikasih cabang (Pipe X) yang dua-duanya masuk tembok
+    //   - jalur pipa nggak saling nabrak (ada jarak minimal 1 m)
+    // posisi di dinding: a = kiri-kanan diliat dari depan dinding itu (0 = tengah, + = kanan), b = tinggi dari lantai
 
     struct Ruas { public Vector2 dari, ke; public Ruas(Vector2 dari, Vector2 ke) { this.dari = dari; this.ke = ke; } }
 
-    // pipa lurus di antara sambungan (ujung lengan Pipe L / Pipe X panjangnya 1 m dari titik tengahnya)
-    static List<Ruas> JalurLurus()
+    // sambungan: Pipe X (lengannya rata tembok) atau Pipe L (lengan1 & lengan2).
+    // arah lengan: x = kanan, y = atas, z = -1 masuk tembok
+    struct Sambung
     {
-        float A = PipaPinggir, B = PipaBawah, T = PipaAtas;
-        List<Ruas> r = new List<Ruas>();
-        for (int s = -1; s <= 1; s += 2)
+        public bool silang; public Vector2 titik; public Vector3 lengan1, lengan2;
+        public Sambung(bool silang, Vector2 titik, Vector3 lengan1, Vector3 lengan2) { this.silang = silang; this.titik = titik; this.lengan1 = lengan1; this.lengan2 = lengan2; }
+    }
+
+    class Jaringan { public List<Ruas> lurus = new List<Ruas>(); public List<Sambung> sambung = new List<Sambung>(); }
+
+    static Dictionary<int, Jaringan> jaringanPipa = new Dictionary<int, Jaringan>();
+
+    // 4 dinding yang dipasangi pipa. kanan = arah kanan kalau kita berdiri ngadep dinding itu
+    struct Dinding
+    {
+        public string nama; public Vector3 pusatBawah, keluar, kanan; public bool bisaDiinjek;
+        public Dinding(string nama, Vector3 pusatBawah, Vector3 keluar, Vector3 kanan, bool bisaDiinjek)
+        { this.nama = nama; this.pusatBawah = pusatBawah; this.keluar = keluar; this.kanan = kanan; this.bisaDiinjek = bisaDiinjek; }
+    }
+
+    static readonly Dinding[] DindingPipa =
+    {
+        new Dinding("Belakang", new Vector3(0f, 0f, H), Vector3.back, Vector3.right, false),
+        new Dinding("Depan", new Vector3(0f, 0f, -H), Vector3.forward, Vector3.left, false),
+        new Dinding("Kiri", new Vector3(-H, 0f, 0f), Vector3.right, Vector3.forward, true),
+        new Dinding("Kanan", new Vector3(H, 0f, 0f), Vector3.left, Vector3.back, true),
+    };
+
+    static IEnumerable<int> SisiPipa()
+    {
+        if (PipaDiBelakang) yield return 0;
+        if (PipaDiDepan) yield return 1;
+        if (PipaDiKiri) yield return 2;
+        if (PipaDiKanan) yield return 3;
+    }
+
+    // grid 1 m di dinding: a -16..16, b 0..40
+    const int GA = 16, GB = 40;
+    static readonly Vector3 TEMBOK = new Vector3(0f, 0f, -1f);
+
+    // acak jaringan pipa. pakai acakan sendiri biar susunan obstacle & box nggak ikut berubah
+    static void AcakJaringanPipa(int seed)
+    {
+        jaringanPipa.Clear();
+        foreach (int d in SisiPipa())
         {
-            r.Add(new Ruas(new Vector2(s * A, 0.3f), new Vector2(s * A, B - 1f)));     // pondasi -> X bawah
-            r.Add(new Ruas(new Vector2(s * A, B + 1f), new Vector2(s * A, T - 1f)));   // X bawah -> belokan atas
-            r.Add(new Ruas(new Vector2(s * (A - 1f), T), new Vector2(s * 1f, T)));     // belokan atas -> X tengah
+            System.Random r = new System.Random(seed * 7919 + d + 1);
+            Jaringan j = new Jaringan();
+            bool[,] dipakai = new bool[2 * GA + 1, GB + 1];
+            int mau = DindingPipa[d].bisaDiinjek ? JumlahJalurPipaSamping : JumlahJalurPipa;
+            int jadi = 0;
+            for (int coba = 0; coba < mau * 8 && jadi < mau; coba++)
+                if (CobaJalur(r, j, dipakai)) jadi++;
+            jaringanPipa[d] = j;
         }
-        r.Add(new Ruas(new Vector2(-(A - 1f), B), new Vector2(A - 1f, B)));           // mendatar bawah
-        r.Add(new Ruas(new Vector2(0f, T + 1f), new Vector2(0f, 2f * H - 0.5f)));     // X tengah -> masuk pondasi plafon
-        return r;
     }
 
-    // titik di dinding -> posisi dunia. sisi -1 = dinding depan (z kecil), +1 = belakang
-    static Vector3 TitikDinding(float sisi, float a, float b, float keluar)
+    static bool Bebas(bool[,] dipakai, Vector2Int c) => c.x >= -GA && c.x <= GA && c.y >= 0 && c.y <= GB && !dipakai[c.x + GA, c.y];
+
+    static Vector3 Lengan(Vector2Int d) => new Vector3(d.x, d.y, 0f);
+
+    // satu jalur pipa: titik-titik beloknya diacak, dicek nggak nabrak jalur lain
+    static bool CobaJalur(System.Random r, Jaringan j, bool[,] dipakai)
     {
-        float tebal = (PakaiDinding ? 0.12f : 0f) + keluar;
-        return new Vector3(a, b, sisi * (H - tebal));
+        Vector2Int[] empat = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+        int kiri = Mathf.Max(-GA + 2, Mathf.RoundToInt(PipaPalingKiri)), kanan = Mathf.Min(GA - 2, Mathf.RoundToInt(PipaPalingKanan));
+
+        // titik mulai
+        int jenisMulai = r.Next(3); // 0 = dari pondasi bawah, 1 = dari pondasi plafon, 2 = keluar dari tembok
+        Vector2Int awal, arah;
+        if (jenisMulai == 0) { awal = new Vector2Int(r.Next(kiri, kanan + 1), 0); arah = Vector2Int.up; }
+        else if (jenisMulai == 1) { awal = new Vector2Int(r.Next(kiri, kanan + 1), GB); arah = Vector2Int.down; }
+        else { awal = new Vector2Int(r.Next(kiri, kanan + 1), r.Next(5, GB - 4)); arah = empat[r.Next(4)]; }
+        if (!Bebas(dipakai, awal)) return false;
+
+        List<Vector2Int> titik = new List<Vector2Int> { awal };
+        HashSet<Vector2Int> sel = new HashSet<Vector2Int> { awal };
+        Vector2Int skr = awal;
+        int ruas = 2 + r.Next(3); // 2-4 potong lurus (1-3 belokan)
+        for (int k = 0; k < ruas; k++)
+        {
+            int mau = 4 + r.Next(9); // 4-12 m
+            bool ketemu = false;
+            for (int pjg = mau; pjg >= 3 && !ketemu; pjg--)
+            {
+                Vector2Int ujung = skr + arah * pjg;
+                if (ujung.x < -GA + 1 || ujung.x > GA - 1 || ujung.y < 3 || ujung.y > GB - 3) continue; // belokan jauh dari pojok & pondasi
+                bool aman = true;
+                for (int t = 1; t <= pjg && aman; t++)
+                {
+                    Vector2Int c = skr + arah * t;
+                    if (!Bebas(dipakai, c) || sel.Contains(c)) aman = false;
+                }
+                if (!aman) continue;
+                for (int t = 1; t <= pjg; t++) sel.Add(skr + arah * t);
+                skr = ujung; titik.Add(skr); ketemu = true;
+            }
+            if (!ketemu) break;
+            Vector2Int belok = new Vector2Int(-arah.y, arah.x);
+            arah = r.Next(2) == 0 ? belok : -belok;
+        }
+        if (titik.Count < 2) return false;
+
+        // ujung akhir: kalau ruas terakhir tegak, kadang nerus sampai masuk pondasi
+        Vector2Int akhir = titik[titik.Count - 1];
+        Vector2Int arahAkhir = titik[titik.Count - 1] - titik[titik.Count - 2];
+        arahAkhir = new Vector2Int(System.Math.Sign(arahAkhir.x), System.Math.Sign(arahAkhir.y));
+        bool tembusPondasi = false;
+        if (arahAkhir.x == 0 && r.NextDouble() < PeluangTembusLantai)
+        {
+            int tepi = arahAkhir.y > 0 ? GB : 0;
+            bool aman = true;
+            for (Vector2Int c = akhir + arahAkhir; c.y != tepi + arahAkhir.y && aman; c += arahAkhir)
+                if (!Bebas(dipakai, c) || sel.Contains(c)) aman = false;
+            if (aman)
+            {
+                for (Vector2Int c = akhir + arahAkhir; c.y != tepi + arahAkhir.y; c += arahAkhir) sel.Add(c);
+                titik[titik.Count - 1] = new Vector2Int(akhir.x, tepi);
+                tembusPondasi = true;
+            }
+        }
+
+        // jadiin potongan: sambungan di tiap titik + pipa lurus di antaranya
+        bool mulaiPondasi = jenisMulai != 2;
+        List<Ruas> lurus = new List<Ruas>();
+        List<Sambung> sambung = new List<Sambung>();
+        for (int i = 0; i < titik.Count; i++)
+        {
+            bool pertama = i == 0, terakhir = i == titik.Count - 1;
+            Vector2Int p = titik[i];
+            Vector2Int keSebelum = pertama ? Vector2Int.zero : Arah(titik[i - 1] - p);
+            Vector2Int keSesudah = terakhir ? Vector2Int.zero : Arah(titik[i + 1] - p);
+
+            if (pertama && !mulaiPondasi) sambung.Add(new Sambung(false, p, Lengan(keSesudah), TEMBOK));
+            else if (terakhir && !tembusPondasi) sambung.Add(new Sambung(false, p, Lengan(keSebelum), TEMBOK));
+            else if (!pertama && !terakhir) sambung.Add(new Sambung(false, p, Lengan(keSebelum), Lengan(keSesudah)));
+
+            if (terakhir) continue;
+            // pipa lurus dari titik ini ke titik berikutnya, dipotong 1 m di ujung yang ada sambungannya
+            Vector2Int q = titik[i + 1];
+            bool sambungDiP = !(pertama && mulaiPondasi);
+            bool sambungDiQ = !(i + 1 == titik.Count - 1 && tembusPondasi);
+            Vector2 dari = Ujung(p, keSesudah, sambungDiP);
+            Vector2 ke = Ujung(q, -keSesudah, sambungDiQ);
+
+            // cabang: Pipe X di tengah pipa panjang, dua lengannya belok masuk tembok
+            int pjg = Mathf.RoundToInt(Vector2Int.Distance(p, q));
+            if (pjg >= 7 && r.NextDouble() < PeluangCabang)
+            {
+                int geser = 3 + r.Next(pjg - 5);
+                Vector2Int m = p + keSesudah * geser;
+                Vector2Int samping = new Vector2Int(-keSesudah.y, keSesudah.x);
+                Vector2Int[] cek = { m + samping, m + samping * 2, m - samping, m - samping * 2 };
+                bool aman = true;
+                foreach (Vector2Int c in cek) if (!Bebas(dipakai, c) || sel.Contains(c) || c.y < 2 || c.y > GB - 2) aman = false;
+                if (aman)
+                {
+                    foreach (Vector2Int c in cek) sel.Add(c);
+                    lurus.Add(new Ruas(dari, (Vector2)(m - keSesudah)));
+                    dari = m + keSesudah;
+                    sambung.Add(new Sambung(true, m, Vector3.zero, Vector3.zero));
+                    sambung.Add(new Sambung(false, m + samping * 2, Lengan(-samping), TEMBOK));
+                    sambung.Add(new Sambung(false, m - samping * 2, Lengan(samping), TEMBOK));
+                }
+            }
+            lurus.Add(new Ruas(dari, ke));
+        }
+
+        // kunci tempatnya (plus 1 m di sekelilingnya) biar jalur lain nggak nempel
+        foreach (Vector2Int c in sel)
+            for (int x = -1; x <= 1; x++)
+                for (int y = -1; y <= 1; y++)
+                {
+                    int ia = c.x + x + GA, ib = c.y + y;
+                    if (ia >= 0 && ia <= 2 * GA && ib >= 0 && ib <= GB) dipakai[ia, ib] = true;
+                }
+        j.lurus.AddRange(lurus);
+        j.sambung.AddRange(sambung);
+        return true;
     }
 
-    // kotak grid yang dilewatin pipa ditandain, biar obstacle & box di dinding depan/belakang nggak nabrak pipa
+    static Vector2Int Arah(Vector2Int d) => new Vector2Int(System.Math.Sign(d.x), System.Math.Sign(d.y));
+
+    // ujung pipa lurus di titik p (ngarah ke 'arah'): mundur 1 m kalau ada sambungan,
+    // kalau di pondasi pakai 0.3 m / 39.5 m biar ujungnya ketutup pondasi
+    static Vector2 Ujung(Vector2Int p, Vector2Int arah, bool adaSambungan)
+    {
+        if (adaSambungan) return (Vector2)(p + arah);
+        if (p.y <= 0) return new Vector2(p.x, 0.3f);
+        if (p.y >= GB) return new Vector2(p.x, 2f * H - 0.5f);
+        return p;
+    }
+
+    // titik di dinding -> posisi dunia. keluar = jarak dari permukaan dinding (panel / ubin)
+    static Vector3 TitikDinding(int d, float a, float b, float keluar)
+    {
+        Dinding w = DindingPipa[d];
+        float tebal = w.bisaDiinjek ? (PakaiUbin ? TinggiBaut : 0f) : (PakaiDinding ? 0.12f : 0f);
+        return w.pusatBawah + w.kanan * a + Vector3.up * b + w.keluar * (tebal + keluar);
+    }
+
+    // arah lengan (x = kanan, y = atas, z = -1 masuk tembok) -> arah dunia
+    static Vector3 ArahDunia(int d, Vector3 lengan)
+    {
+        Dinding w = DindingPipa[d];
+        return w.kanan * lengan.x + Vector3.up * lengan.y + w.keluar * lengan.z;
+    }
+
+    // kotak grid yang dilewatin pipa ditandain, biar obstacle & box nggak ditaruh numpuk sama pipa
     static void TandaiJalurPipa(Permukaan p, bool[,] terpakai)
     {
-        if (p.bisaDiinjek) return;
-        List<Vector2> titik = new List<Vector2>();
-        foreach (Ruas r in JalurLurus())
+        foreach (var isi in jaringanPipa)
         {
-            int n = Mathf.CeilToInt(Vector2.Distance(r.dari, r.ke));
-            for (int k = 0; k <= n; k++) titik.Add(Vector2.Lerp(r.dari, r.ke, n > 0 ? (float)k / n : 0f));
-        }
-        float A = PipaPinggir, B = PipaBawah;
-        titik.Add(new Vector2(-(A + 2f), B)); titik.Add(new Vector2(A + 2f, B));
+            List<Vector2> titik = new List<Vector2>();
+            foreach (Ruas r in isi.Value.lurus)
+            {
+                int n = Mathf.CeilToInt(Vector2.Distance(r.dari, r.ke));
+                for (int k = 0; k <= n; k++) titik.Add(Vector2.Lerp(r.dari, r.ke, n > 0 ? (float)k / n : 0f));
+            }
+            foreach (Sambung s in isi.Value.sambung) titik.Add(s.titik);
 
-        for (int s = -1; s <= 1; s += 2)
             foreach (Vector2 t in titik)
             {
-                Vector3 l = p.KeLokal(TitikDinding(s, t.x, t.y, 0.4f));
+                Vector3 l = p.KeLokal(TitikDinding(isi.Key, t.x, t.y, 0.4f));
                 if (Mathf.Abs(l.y) > 2f) continue; // pipa dinding seberang
                 Tandai(terpakai, SelDari(l.x), SelDari(l.z), 1);
             }
+        }
     }
 
-    static Transform SusunPipaDinding(Transform induk, float sisi, string nama)
+    static Transform SusunPipaDinding(Transform induk, int sisi, string nama)
     {
         Transform grup = new GameObject(nama).transform;
         grup.SetParent(induk, false);
-        Vector3 keluar = Vector3.forward * -sisi;  // arah keluar dari tembok (ke dalem arena)
+        Vector3 keluar = DindingPipa[sisi].keluar;  // arah keluar dari tembok (ke dalem arena)
+        if (!jaringanPipa.TryGetValue(sisi, out Jaringan j)) return grup;
 
         // ukur pipa dulu: jari-jari & panjang 1 potong
         Transform contoh = Pasang("pipestraight", grup, Vector3.zero, Quaternion.identity, bahan, out Transform slotContoh);
@@ -737,11 +937,12 @@ public static class ArenaBuilder
         float jarak = jari + 0.02f;                // pipa nempel tembok
 
         // pipa lurus
-        foreach (Ruas r in JalurLurus())
+        foreach (Ruas r in j.lurus)
         {
             Vector3 dari = TitikDinding(sisi, r.dari.x, r.dari.y, jarak);
             Vector3 ke = TitikDinding(sisi, r.ke.x, r.ke.y, jarak);
             float panjang = Vector3.Distance(dari, ke);
+            if (panjang < 0.05f) continue;
             int n = Mathf.Max(1, Mathf.RoundToInt(panjang / panjangPotong));
             float potong = panjang / n;
             Vector3 arah = (ke - dari).normalized;
@@ -750,17 +951,12 @@ public static class ArenaBuilder
         }
 
         // sambungan
-        float A = PipaPinggir, B = PipaBawah, T = PipaAtas;
-        Vector3 naik = Vector3.up, samping = Vector3.right;
-        for (int s = -1; s <= 1; s += 2)
+        foreach (Sambung s in j.sambung)
         {
-            Vector3 kedalam = samping * -s; // ke arah tengah dinding
-            PasangPipaX(grup, TitikDinding(sisi, s * A, B, jarak), keluar);                            // pertigaan bawah
-            PasangPipaL(grup, TitikDinding(sisi, s * A, T, jarak), -naik, kedalam);                    // belokan atas
-            PasangPipaL(grup, TitikDinding(sisi, s * (A + 2f), B, jarak), -samping * s, -keluar);      // ujung luar masuk tembok
+            Vector3 titik = TitikDinding(sisi, s.titik.x, s.titik.y, jarak);
+            if (s.silang) PasangPipaX(grup, titik, keluar);
+            else PasangPipaL(grup, titik, ArahDunia(sisi, s.lengan1), ArahDunia(sisi, s.lengan2));
         }
-        PasangPipaX(grup, TitikDinding(sisi, 0f, T, jarak), keluar);                                   // pertemuan tengah
-        PasangPipaL(grup, TitikDinding(sisi, 0f, T - 2f, jarak), naik, -keluar);                       // turun terus masuk tembok
         return grup;
     }
 
@@ -844,23 +1040,73 @@ public static class ArenaBuilder
         int baris = Mathf.Max(1, Mathf.RoundToInt((atas - bawah) / ukuran));
         float lebarSel = (kanan2 - kiri) / kolom, tinggiSel = (atas - bawah) / baris;
 
+        bool adaWall2 = Model("wall2") != null;
+
+        // 1. jenis panel per sel: Wall biasa, ada baris & kelompok Wall 2 biar nggak polos
+        string[,] jenis = new string[kolom, baris];
         for (int i = 0; i < kolom; i++)
             for (int j = 0; j < baris; j++)
             {
-                Vector3 pos = new Vector3(0f, 0f, pusat.z) + kanan * (kiri + lebarSel * (i + 0.5f)) * Mathf.Sign(kanan.x) + Vector3.up * (bawah + tinggiSel * (j + 0.5f));
-                // Wall 2 cuma di pinggir biar jadi bingkai yang rapi, bukan tambal-tambalan
                 int jarakKePinggir = Mathf.Min(Mathf.Min(i, j), Mathf.Min(kolom - 1 - i, baris - 1 - j));
-                string jenis = jarakKePinggir < BingkaiWall2 && Model("wall2") != null ? "wall2" : "wall";
-                Transform m = Pasang(jenis, grup, pos, rot, bahan, out Transform slot);
-                if (m == null) continue;
-                Arahkan(m, slot, -1, 2);       // tipis ke depan, jadi berdiri
-                JanganKebalikDinding(m, slot);
-                Bounds asli = BatasLokal(m, slot);
-                m.parent.localScale = new Vector3(lebarSel / asli.size.x, tinggiSel / asli.size.y, 1f); // pas 1 sel, tebelnya tetep
-                Ratakan(m, slot, Rata.Panel);
+                jenis[i, j] = jarakKePinggir < BingkaiWall2 && adaWall2 ? "wall2" : "wall";
+            }
+        if (adaWall2)
+        {
+            for (int g = 0; g < GarisWall2; g++)
+            {
+                int j = 2 + acak.Next(Mathf.Max(1, baris - 4));
+                for (int i = 0; i < kolom; i++) jenis[i, j] = "wall2";
+            }
+            for (int t = 0; t < TambalanWall2; t++)
+            {
+                int w = 2 + acak.Next(3), h = 2 + acak.Next(2);
+                int i0 = acak.Next(Mathf.Max(1, kolom - w)), j0 = acak.Next(Mathf.Max(1, baris - h));
+                for (int i = i0; i < Mathf.Min(kolom, i0 + w); i++)
+                    for (int j = j0; j < Mathf.Min(baris, j0 + h); j++) jenis[i, j] = "wall2";
+            }
+        }
+
+        // 2. panel gede (2x2 & 3x3 sel) ditaruh duluan di tempat acak yang masih kosong
+        bool[,] terisi = new bool[kolom, baris];
+        int[] ukuranGede = new int[PanelGede3x3 + PanelGede2x2];
+        for (int k = 0; k < ukuranGede.Length; k++) ukuranGede[k] = k < PanelGede3x3 ? 3 : 2;
+        foreach (int u in ukuranGede)
+            for (int coba = 0; coba < 40; coba++)
+            {
+                int i0 = acak.Next(Mathf.Max(1, kolom - u + 1)), j0 = acak.Next(Mathf.Max(1, baris - u + 1));
+                if (i0 + u > kolom || j0 + u > baris) continue;
+                bool kosong = true;
+                for (int i = i0; i < i0 + u && kosong; i++)
+                    for (int j = j0; j < j0 + u; j++) if (terisi[i, j]) { kosong = false; break; }
+                if (!kosong) continue;
+                for (int i = i0; i < i0 + u; i++)
+                    for (int j = j0; j < j0 + u; j++) terisi[i, j] = true;
+                string jn = adaWall2 && acak.NextDouble() < 0.4 ? "wall2" : "wall";
+                PasangPanel(grup, jn, pusat, rot, kanan, kiri + lebarSel * (i0 + u * 0.5f), bawah + tinggiSel * (j0 + u * 0.5f), lebarSel * u, tinggiSel * u);
+                break;
             }
 
+        // 3. sisanya panel 1 sel
+        for (int i = 0; i < kolom; i++)
+            for (int j = 0; j < baris; j++)
+                if (!terisi[i, j])
+                    PasangPanel(grup, jenis[i, j], pusat, rot, kanan, kiri + lebarSel * (i + 0.5f), bawah + tinggiSel * (j + 0.5f), lebarSel, tinggiSel);
+
         return grup;
+    }
+
+    // 1 panel dinding: x = posisi mendatar, y = tinggi tengah panel, lebar & tinggi dalam meter
+    static void PasangPanel(Transform grup, string jenis, Vector3 pusat, Quaternion rot, Vector3 kanan, float x, float y, float lebar, float tinggi)
+    {
+        Vector3 pos = new Vector3(0f, 0f, pusat.z) + kanan * x * Mathf.Sign(kanan.x) + Vector3.up * y;
+        Transform m = Pasang(jenis, grup, pos, rot, bahan, out Transform slot);
+        if (m == null) return;
+        Arahkan(m, slot, -1, 2);       // tipis ke depan, jadi berdiri
+        JanganKebalikDinding(m, slot);
+        if (PutarPanelAcak && acak.Next(2) == 0) m.RotateAround(slot.position, slot.forward, 180f); // muka tetep ke dalem
+        Bounds asli = BatasLokal(m, slot);
+        m.parent.localScale = new Vector3(lebar / asli.size.x, tinggi / asli.size.y, 1f); // pas ukurannya, tebelnya tetep
+        Ratakan(m, slot, Rata.Panel);
     }
 
     // ---------------------------------------------------------------- PONDASI & POJOK

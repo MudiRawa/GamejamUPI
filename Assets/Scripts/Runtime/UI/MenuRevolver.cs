@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using VertigoShift.Gameplay.Weapons;
 
 namespace VertigoShift.UI
 {
@@ -68,7 +69,10 @@ namespace VertigoShift.UI
             if (laras != null && gagang != null && tabung[0] != null)
             {
                 Vector3 tengahTabung = Batas(tabung[0]).center;
-                Vector3 depan = (Batas(laras).center - tengahTabung).normalized;
+                // arah depan = sumbu panjang laras (sejajar sumbu tabung). dulu pakai garis dari tengah tabung
+                // ke tengah laras, padahal laras ada di atas tabung -> miring ~10 derajat & tabung muternya oleng
+                Vector3 sumbuLaras = RevolverViewmodel.SumbuPanjang(laras, poros);
+                Vector3 depan = Vector3.Dot(sumbuLaras, Batas(laras).center - tengahTabung) < 0f ? -sumbuLaras : sumbuLaras;
                 Vector3 atas = Vector3.ProjectOnPlane(tengahTabung - Batas(gagang).center, depan).normalized;
                 Vector3 arahMau = Quaternion.Euler(0f, -miring, 0f) * Vector3.right;
                 model.localRotation = Quaternion.LookRotation(arahMau, Vector3.up) * Quaternion.Inverse(Quaternion.LookRotation(depan, atas));
@@ -86,8 +90,8 @@ namespace VertigoShift.UI
             {
                 Bounds bt = Batas(tabung[0]);
                 pusatTabung = bt.center;
-                Vector3 laras2 = laras != null ? Batas(laras).center : pusatTabung + Vector3.right;
-                sumbuTabung = (laras2 - pusatTabung).normalized;
+                // tabung muter pas di sumbunya sendiri (sejajar laras), bukan miring ke arah laras
+                sumbuTabung = laras != null ? RevolverViewmodel.SumbuPanjang(laras, poros) : Vector3.right;
             }
 
             // 3. lampu: satu putih dari depan atas, dua warna dari belakang biar pinggirannya nyala
